@@ -248,6 +248,98 @@ def generate_distribution(
     return all_paths[:, -pred_len:, :]
 
 
+def analyze_distribution(paths, current_price, name, code):
+    """
+    paths: (sample_count, pred_len, 6)  normalized raw paths from generate_distribution
+    current_price: float, latest close price
+    name, code: stock info for display
+
+    Returns dict with all statistics and trading signal
+    """
+    n = paths.shape[0]
+    close_paths = paths[:, :, 3]         # (n, pred_len)  收盘价
+    final_prices = close_paths[:, -1]     # (n,)           期末价格
+
+    # 1. 期末价格统计
+    mean_final = float(np.mean(final_prices))
+    median_final = float(np.median(final_prices))
+    std_final = float(np.std(final_prices))
+    min_final = float(np.min(final_prices))
+    max_final = float(np.max(final_prices))
+
+    # 2. 涨跌概率
+    up_count = int(np.sum(final_prices > current_price))
+    down_count = n - up_count
+    up_prob = up_count / n * 100
+
+    # 3. VaR (期末收盘价回报的百分位数)
+    returns = final_prices / current_price - 1
+    var_95 = float(current_price * (1 + np.percentile(returns, 5)))
+    var_99 = float(current_price * (1 + np.percentile(returns, 1)))
+
+    # 4. 期望收益
+    expected_return = float((mean_final / current_price - 1) * 100)
+    median_return = float((median_final / current_price - 1) * 100)
+
+    # 5. 每条路径的最大回撤
+    max_drawdowns = []
+    for p in close_paths:
+        peak = np.maximum.accumulate(p)
+        dd = (p - peak) / (peak + 1e-8)
+        max_drawdowns.append(float(np.min(dd)))
+    avg_max_drawdown = float(np.mean(max_drawdowns) * 100)
+    worst_drawdown = float(np.min(max_drawdowns) * 100)
+
+    # 6. 均值路径 + 80% 置信带 (pointwise)
+    mean_path = np.mean(close_paths, axis=0)
+    p10_path = np.percentile(close_paths, 10, axis=0)
+    p90_path = np.percentile(close_paths, 90, axis=0)
+
+    # 7. 四因子综合评分 ( -1 ~ +1 )
+    # 方向因子 (35%): 涨的概率越高越好
+    direction_score = (up_prob - 50) / 50
+    # 收益因子 (25%): 期望收益归一化到 [-1, +1]
+    return_score = min(max(expected_return / 5, -1), 1)
+    # 稳定性因子 (20%): 低波动得高分
+    stability_score = 1 - min(std_final / (abs(mean_final) + 1e-8) * 5, 1)
+    # 尾部风险因子 (20%): 尾部风险越小越好
+    tail_score = 1 - min(abs(var_95 / current_price - 1) * 10, 1)
+
+    composite_score = (
+        direction_score * 0.35 +
+        return_score * 0.25 +
+        stability_score * 0.20 +
+        tail_score * 0.20
+    )
+
+    # 8. 信号判断
+    if composite_score > 0.4 and up_prob > 60 and expected_return > 2:
+        signal = f"BUY  (score {composite_score:+.2f})"
+        suggestion = f"Strong upward bias. Consider position {(up_prob/100 - 0.5) * 2 * 100:.0f}%, stop-loss at {var_95:.2f}"
+    elif composite_score > 0.15 and up_prob > 50:
+        signal = f"HOLD (score {composite_score:+.2f})"
+        suggestion = "Mild positive signal. Recommend watching or light position"
+    elif composite_score < -0.2:
+        signal = f"SELL (score {composite_score:+.2f})"
+        suggestion = f"Downside risk elevated (VaR95={var_95:.2f}). Consider reducing exposure"
+    else:
+        signal = f"WAIT (score {composite_score:+.2f})"
+        suggestion = "No clear signal. Stay on the sidelines"
+
+    return {
+        "n_samples": n,
+        "up_prob": up_prob, "up_count": up_count, "down_count": down_count,
+        "mean_final": mean_final, "median_final": median_final, "std_final": std_final,
+        "min_final": min_final, "max_final": max_final,
+        "var_95": var_95, "var_99": var_99,
+        "expected_return": expected_return, "median_return": median_return,
+        "avg_max_drawdown": avg_max_drawdown, "worst_drawdown": worst_drawdown,
+        "mean_path": mean_path, "p10_path": p10_path, "p90_path": p90_path,
+        "composite_score": composite_score,
+        "signal": signal, "suggestion": suggestion,
+    }
+
+
 # ============ 主流程 ============
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)

@@ -161,7 +161,7 @@
 
 ---
 
-- [ ] 2. 实现分布分析与交易信号评分
+- [x] 2. 实现分布分析与交易信号评分
 
   **What to do**:
   - 实现 `analyze_distribution(paths, current_price)` 函数

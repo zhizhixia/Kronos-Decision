@@ -8,7 +8,7 @@
       "plan_name": "predict-with-confidence",
       "status": "active",
       "started_at": "2026-06-01T16:12:23.031Z",
-      "updated_at": "2026-06-01T16:20:56.553Z",
+      "updated_at": "2026-06-01T16:24:05.334Z",
       "session_ids": [
         "ses_186df0393ffeFy40mRmQyqehGq"
       ],
@@ -28,6 +28,19 @@
           "updated_at": "2026-06-01T16:20:56.553Z",
           "ended_at": "2026-06-01T16:20:56.549Z",
           "elapsed_ms": 276872
+        },
+        "todo:2": {
+          "task_key": "todo:2",
+          "task_label": "2",
+          "task_title": "实现分布分析与交易信号评分",
+          "session_id": "ses_17c023856ffeEVTgH7u8xA8FSs",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-06-01T16:24:05.334Z",
+          "started_at": "2026-06-01T16:23:17.558Z",
+          "status": "completed",
+          "ended_at": "2026-06-01T16:24:05.334Z",
+          "elapsed_ms": 47776
         }
       }
     }
@@ -35,7 +48,7 @@
   "active_plan": "C:\\Users\\xzh\\Desktop\\kronos\\.omo\\plans\\predict-with-confidence.md",
   "started_at": "2026-06-01T16:12:23.031Z",
   "status": "active",
-  "updated_at": "2026-06-01T16:20:56.553Z",
+  "updated_at": "2026-06-01T16:24:05.334Z",
   "session_ids": [
     "ses_186df0393ffeFy40mRmQyqehGq"
   ],
@@ -55,6 +68,19 @@
       "updated_at": "2026-06-01T16:20:56.553Z",
       "ended_at": "2026-06-01T16:20:56.549Z",
       "elapsed_ms": 276872
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "实现分布分析与交易信号评分",
+      "session_id": "ses_17c023856ffeEVTgH7u8xA8FSs",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-06-01T16:24:05.334Z",
+      "started_at": "2026-06-01T16:23:17.558Z",
+      "status": "completed",
+      "ended_at": "2026-06-01T16:24:05.334Z",
+      "elapsed_ms": 47776
     }
   },
   "agent": "atlas"
