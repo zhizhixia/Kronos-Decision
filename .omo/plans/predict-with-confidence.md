@@ -229,7 +229,7 @@
 
 ---
 
-- [ ] 3. 实现可视化与 CSV 输出
+- [x] 3. 实现可视化与 CSV 输出
 
   **What to do**:
   - 实现 `plot_distribution(res, future_dates, name, code)` 函数

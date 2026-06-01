@@ -8,7 +8,7 @@
       "plan_name": "predict-with-confidence",
       "status": "active",
       "started_at": "2026-06-01T16:12:23.031Z",
-      "updated_at": "2026-06-01T16:24:05.334Z",
+      "updated_at": "2026-06-01T16:37:22.985Z",
       "session_ids": [
         "ses_186df0393ffeFy40mRmQyqehGq"
       ],
@@ -41,6 +41,19 @@
           "status": "completed",
           "ended_at": "2026-06-01T16:24:05.334Z",
           "elapsed_ms": 47776
+        },
+        "todo:3": {
+          "task_key": "todo:3",
+          "task_label": "3",
+          "task_title": "实现可视化与 CSV 输出",
+          "session_id": "ses_17bff43a0ffeXLftqtBnDcPrvd",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-06-01T16:37:22.985Z",
+          "started_at": "2026-06-01T16:33:16.359Z",
+          "status": "completed",
+          "ended_at": "2026-06-01T16:37:22.985Z",
+          "elapsed_ms": 246626
         }
       }
     }
@@ -48,7 +61,7 @@
   "active_plan": "C:\\Users\\xzh\\Desktop\\kronos\\.omo\\plans\\predict-with-confidence.md",
   "started_at": "2026-06-01T16:12:23.031Z",
   "status": "active",
-  "updated_at": "2026-06-01T16:24:05.334Z",
+  "updated_at": "2026-06-01T16:37:22.985Z",
   "session_ids": [
     "ses_186df0393ffeFy40mRmQyqehGq"
   ],
@@ -81,6 +94,19 @@
       "status": "completed",
       "ended_at": "2026-06-01T16:24:05.334Z",
       "elapsed_ms": 47776
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "实现可视化与 CSV 输出",
+      "session_id": "ses_17bff43a0ffeXLftqtBnDcPrvd",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-06-01T16:37:22.985Z",
+      "started_at": "2026-06-01T16:33:16.359Z",
+      "status": "completed",
+      "ended_at": "2026-06-01T16:37:22.985Z",
+      "elapsed_ms": 246626
     }
   },
   "agent": "atlas"
