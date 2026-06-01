@@ -11,7 +11,7 @@ import matplotlib
 matplotlib.use("Agg")  # 非交互式后端
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime, timedelta
+from datetime import timedelta
 import json
 import warnings
 warnings.filterwarnings("ignore")
@@ -21,7 +21,8 @@ plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei"]
 plt.rcParams["axes.unicode_minus"] = False
 
 import torch
-import torch.nn.functional as F
+
+from tqdm import trange
 
 from model import Kronos, KronosTokenizer
 from model.kronos import calc_time_stamps, sample_from_logits
