@@ -249,12 +249,13 @@ body::before {
   border-radius: 50%;
   background: var(--signal-buy);
   box-shadow: 0 0 8px var(--signal-buy);
-  animation: pulse 2s ease-in-out infinite;
+  /* 模型在线：静态指示，无脉冲动画 */
+  animation: none;
 }
 
-@keyframes pulse {
+@keyframes emptyPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
+  50% { opacity: 0.55; transform: scale(0.9); }
 }
 
 /* =========================================================================
@@ -421,15 +422,20 @@ body::before {
    ========================================================================= */
 .loading-overlay {
   display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 20px;
   padding: 60px 24px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  margin-bottom: 24px;
+  background: rgba(10, 14, 23, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: none;
+  border-radius: 0;
+  margin-bottom: 0;
 }
 
 .loading-overlay.active {
@@ -985,12 +991,53 @@ body::before {
 }
 
 .chart-area {
+  position: relative;
   width: 100%;
-  height: 480px;
+  height: clamp(320px, 50vh, 560px);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-inset);
 }
+
+.chart-area canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Canvas 蜡烛图悬停 tooltip */
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  min-width: 130px;
+  padding: 10px 12px;
+  background: rgba(13, 18, 27, 0.95);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.chart-tooltip[hidden] { display: none; }
+.chart-tooltip .tt-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-tooltip .tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+.chart-tooltip .tt-row span { color: var(--text-tertiary); }
+.chart-tooltip .tt-row b.up { color: var(--signal-sell); }   /* 红涨 */
+.chart-tooltip .tt-row b.down { color: var(--signal-buy); }  /* 绿跌 */
 
 /* =========================================================================
    设置面板（可折叠）
@@ -1148,6 +1195,76 @@ body::before {
 .settings-save-status.error { color: var(--signal-sell); }
 
 /* =========================================================================
+   自定义 Autocomplete 下拉组件
+   ========================================================================= */
+.autocomplete {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: none;
+}
+
+.autocomplete-list.open {
+  display: block;
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+  background: var(--bg-panel-hover);
+  color: var(--text-primary);
+}
+
+.autocomplete-item.active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.autocomplete-item .ac-code {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.autocomplete-item .ac-name {
+  color: var(--text-secondary);
+}
+
+/* =========================================================================
+   输入校验：超出 min/max 范围的红边框
+   ========================================================================= */
+input.input-invalid,
+select.input-invalid {
+  border-color: var(--signal-sell) !important;
+  box-shadow: 0 0 0 3px var(--signal-sell-dim) !important;
+}
+
+/* =========================================================================
    网格布局
    ========================================================================= */
 .grid-3 {
@@ -1272,8 +1389,11 @@ body::before {
 }
 
 .empty-state .empty-icon {
-  font-size: 48px;
-  opacity: 0.3;
+  font-size: 52px;
+  opacity: 0.85;
+  color: var(--accent);
+  text-shadow: 0 0 24px var(--accent-glow);
+  animation: emptyPulse 2.4s ease-in-out infinite;
 }
 
 .empty-state .empty-title {
@@ -1289,6 +1409,45 @@ body::before {
   color: var(--text-tertiary);
   max-width: 420px;
   line-height: 1.6;
+}
+
+/* 三步引导 */
+.empty-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 18px 22px;
+  max-width: 460px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.empty-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.empty-steps .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--border-accent);
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
 /* =========================================================================

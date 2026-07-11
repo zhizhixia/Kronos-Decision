@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kronos 决策系统 | 交易信号分析</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <!-- Chart.js 用于预测走势图 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- chartjs-adapter-date-fns 用于时间轴 -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -25,7 +21,7 @@
             </div>
         </div>
         <div class="topbar-meta">
-            <span class="meta-item"><span class="live-dot"></span>实时决策引擎</span>
+            <span class="meta-item"><span class="live-dot"></span>模型在线</span>
             <span class="meta-item" id="meta-time">--:--:--</span>
         </div>
     </header>
@@ -34,14 +30,13 @@
     <!-- 控制 / 搜索栏 -->
     <!-- ============================================================ -->
     <section class="control-bar">
-        <!-- 股票代码搜索 -->
+        <!-- 股票代码搜索（自定义 Autocomplete） -->
         <div class="search-bar">
             <label>股票标的</label>
-            <div class="select-wrap">
-                <input type="text" id="stock-select" list="stock-datalist" placeholder="输入股票代码搜索..." autocomplete="off" aria-label="选择股票">
-                <datalist id="stock-datalist">
-                    <option value="">加载中...</option>
-                </datalist>
+            <div class="autocomplete select-wrap" id="stock-autocomplete">
+                <input type="text" id="stock-select" placeholder="输入股票代码搜索..." autocomplete="off"
+                       aria-label="选择股票" aria-expanded="false" aria-controls="stock-suggest" role="combobox">
+                <ul class="autocomplete-list" id="stock-suggest" role="listbox"></ul>
             </div>
         </div>
 
@@ -201,7 +196,7 @@
             </div>
         </div>
 
-        <!-- 预测走势图 -->
+        <!-- 预测走势图（Canvas 蜡烛图） -->
         <div class="chart-container">
             <div class="panel-header">
                 <h2><span class="header-icon">📈</span>预测走势</h2>
@@ -209,6 +204,7 @@
             </div>
             <div class="chart-area">
                 <canvas id="prediction-chart"></canvas>
+                <div class="chart-tooltip" id="chart-tooltip" hidden></div>
             </div>
         </div>
 
@@ -237,11 +233,13 @@
     <!-- 空状态（未生成报告时显示） -->
     <!-- ============================================================ -->
     <div class="empty-state" id="empty-state">
-        <div class="empty-icon">◉</div>
+        <div class="empty-icon">📊</div>
         <div class="empty-title">选择股票标的并生成决策报告</div>
-        <div class="empty-desc">
-            调整预测参数后点击「生成报告」按钮，系统将基于 Kronos 预测模型给出买卖信号、趋势分析与风险评估。
-        </div>
+        <ol class="empty-steps">
+            <li><span class="step-num">1</span><span>在搜索框输入并选择股票标的</span></li>
+            <li><span class="step-num">2</span><span>按需调整预测长度、温度、Top-P 参数</span></li>
+            <li><span class="step-num">3</span><span>点击「生成报告」获取买卖信号与风险评估</span></li>
+        </ol>
     </div>
 
     <!-- ============================================================ -->
@@ -278,6 +276,8 @@
     const $ = (id) => document.getElementById(id);
     const els = {
         stockSelect: $('stock-select'),
+        stockSuggest: $('stock-suggest'),
+        stockAutocomplete: $('stock-autocomplete'),
         predLen: $('pred-len'),
         temperature: $('temperature'),
         topP: $('top-p'),
@@ -308,7 +308,8 @@
         // score table
         scoreTableBody: $('score-table-body'),
         // chart
-        chartArea: $('prediction-chart'),
+        chartCanvas: $('prediction-chart'),
+        chartTooltip: $('chart-tooltip'),
         chartTag: $('chart-tag'),
         // footer
         footerStock: $('footer-stock'),
@@ -323,8 +324,17 @@
         settingsSaveStatus: $('settings-save-status'),
     };
 
-    let predictionChart = null;
+    // 原始配置（嵌套） + 拍平后的配置
     let configData = {};
+    let configFlat = {};
+
+    // 股票列表与 Autocomplete 状态
+    let stocks = [];
+    let acState = { open: false, filtered: [], active: -1 };
+
+    // 蜡烛图状态
+    let chartState = null;
+    let chartResizeHandler = null;
 
     /* ---- 信号映射 ---- */
     const SIGNAL_MAP = {
@@ -344,6 +354,8 @@
         loadStockList();
         loadConfig();
         bindEvents();
+        bindAutocomplete();
+        bindChartHover();
     }
 
     function updateClock() {
@@ -356,6 +368,57 @@
         els.generateBtn.addEventListener('click', generateReport);
         els.settingsToggle.addEventListener('click', toggleSettings);
         els.saveSettingsBtn.addEventListener('click', saveConfig);
+
+        // 参数输入 min/max 校验
+        document.querySelectorAll('.control-bar input[min], .control-bar input[max]').forEach(inp => {
+            inp.addEventListener('blur', () => validateInput(inp));
+            inp.addEventListener('input', () => inp.classList.remove('input-invalid'));
+        });
+    }
+
+    /* ============================================================
+       通用：递归序列化，避免 [object Object]
+       ============================================================ */
+    function safeDisplay(v) {
+        if (v == null) return '';
+        if (typeof v === 'object') {
+            try { return JSON.stringify(v); } catch (e) { return String(v); }
+        }
+        return String(v);
+    }
+
+    /* ============================================================
+       嵌套 dataclass 拍平 / 还原
+       ============================================================ */
+    function flattenConfig(obj, prefix) {
+        const out = {};
+        prefix = prefix || '';
+        Object.entries(obj).forEach(([k, v]) => {
+            const key = prefix ? `${prefix}.${k}` : k;
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+                Object.assign(out, flattenConfig(v, key));
+            } else {
+                out[key] = v;
+            }
+        });
+        return out;
+    }
+
+    function unflattenConfig(flat) {
+        const out = {};
+        Object.entries(flat).forEach(([k, v]) => {
+            const parts = k.split('.');
+            let cur = out;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const p = parts[i];
+                if (typeof cur[p] !== 'object' || cur[p] === null || Array.isArray(cur[p])) {
+                    cur[p] = {};
+                }
+                cur = cur[p];
+            }
+            cur[parts[parts.length - 1]] = v;
+        });
+        return out;
     }
 
     /* ============================================================
@@ -368,74 +431,198 @@
             if (data.status !== 'ok' && !data.stocks) {
                 throw new Error(data.error_message || '获取股票列表失败');
             }
-            const stocks = data.stocks || [];
-            // input 占位文本更新
+            stocks = data.stocks || [];
             els.stockSelect.placeholder = `输入搜索（共 ${stocks.length} 只股票）...`;
-            // datalist 填充选项
-            const datalist = document.getElementById('stock-datalist');
-            datalist.innerHTML = stocks.map(s =>
-                `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} · ${escapeHtml(s.name)}</option>`
-            ).join('');
         } catch (e) {
-            const datalist = document.getElementById('stock-datalist');
-            if (datalist) datalist.innerHTML = '<option value="">股票列表加载失败</option>';
+            els.stockSelect.placeholder = '股票列表加载失败';
             showAlert('error', `加载股票列表失败: ${e.message}`);
         }
     }
 
     /* ============================================================
-       加载 / 保存配置
+       自定义 Autocomplete
+       ============================================================ */
+    function bindAutocomplete() {
+        els.stockSelect.addEventListener('input', () => {
+            acState.filtered = filterStocks(els.stockSelect.value);
+            acState.active = acState.filtered.length ? 0 : -1;
+            renderSuggest();
+        });
+        els.stockSelect.addEventListener('focus', () => {
+            if (!acState.open) {
+                acState.filtered = filterStocks(els.stockSelect.value);
+                acState.active = acState.filtered.length ? 0 : -1;
+                renderSuggest();
+            }
+        });
+        els.stockSelect.addEventListener('keydown', (e) => {
+            if (!acState.open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+                acState.filtered = filterStocks(els.stockSelect.value);
+                acState.active = acState.filtered.length ? 0 : -1;
+                renderSuggest();
+                if (e.key === 'ArrowDown') e.preventDefault();
+                return;
+            }
+            if (!acState.open) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                acState.active = (acState.active + 1) % acState.filtered.length;
+                renderSuggest();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                acState.active = (acState.active - 1 + acState.filtered.length) % acState.filtered.length;
+                renderSuggest();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (acState.active >= 0 && acState.filtered[acState.active]) {
+                    selectStock(acState.filtered[acState.active]);
+                }
+            } else if (e.key === 'Escape') {
+                closeSuggest();
+            }
+        });
+        els.stockSelect.addEventListener('blur', () => {
+            // 延迟关闭，使 click 可触发
+            setTimeout(closeSuggest, 160);
+        });
+
+        // 点击项委托
+        els.stockSuggest.addEventListener('mousedown', (e) => {
+            const li = e.target.closest('.autocomplete-item');
+            if (!li) return;
+            e.preventDefault();
+            const code = li.getAttribute('data-code');
+            const s = stocks.find(x => x.code === code);
+            if (s) selectStock(s);
+        });
+    }
+
+    function filterStocks(q) {
+        const query = (q || '').trim().toLowerCase();
+        if (!query) return stocks.slice(0, 20);
+        return stocks
+            .filter(s => (s.code || '').toLowerCase().includes(query) ||
+                         (s.name || '').toLowerCase().includes(query))
+            .slice(0, 50);
+    }
+
+    function renderSuggest() {
+        const list = els.stockSuggest;
+        if (!acState.filtered.length) {
+            closeSuggest();
+            return;
+        }
+        list.innerHTML = acState.filtered.map((s, i) =>
+            `<li class="autocomplete-item${i === acState.active ? ' active' : ''}" ` +
+            `data-code="${escapeHtml(s.code)}" role="option">` +
+            `<span class="ac-code">${escapeHtml(s.code)}</span>` +
+            `<span class="ac-name">${escapeHtml(s.name || '')}</span>` +
+            `</li>`
+        ).join('');
+        list.classList.add('open');
+        acState.open = true;
+        els.stockSelect.setAttribute('aria-expanded', 'true');
+        // 滚动激活项到可视区
+        const activeEl = list.children[acState.active];
+        if (activeEl && activeEl.scrollIntoView) activeEl.scrollIntoView({ block: 'nearest' });
+    }
+
+    function closeSuggest() {
+        els.stockSuggest.classList.remove('open');
+        els.stockSuggest.innerHTML = '';
+        acState.open = false;
+        acState.active = -1;
+        els.stockSelect.setAttribute('aria-expanded', 'false');
+    }
+
+    function selectStock(s) {
+        if (!s) return;
+        els.stockSelect.value = s.code;
+        els.stockSelect.classList.remove('input-invalid');
+        closeSuggest();
+    }
+
+    /* ============================================================
+       加载 / 保存配置（支持嵌套对象）
        ============================================================ */
     async function loadConfig() {
         try {
             const res = await fetch('/api/config');
             configData = await res.json();
-            renderConfig(configData);
+            configFlat = flattenConfig(configData);
+            renderConfig(configFlat);
         } catch (e) {
             // 配置加载失败不阻塞主流程
             console.warn('配置加载失败:', e);
         }
     }
 
-    function renderConfig(cfg) {
-        // 渲染可编辑的配置字段（跳过 status 这类元字段）
+    function renderConfig(flat) {
         const skipKeys = ['status', 'error_message'];
-        const fields = Object.entries(cfg)
-            .filter(([k]) => !skipKeys.includes(k));
+        const fields = Object.entries(flat)
+            .filter(([k]) => !skipKeys.some(sk => k === sk || k.startsWith(sk + '.')));
 
         els.settingsGrid.innerHTML = fields.map(([key, value]) => {
             const isBool = typeof value === 'boolean';
             const isNumber = typeof value === 'number';
+            const isArr = Array.isArray(value);
+            const isObjStr = (typeof value === 'object' && value !== null);
+            // 数组/对象作为 JSON 字符串编辑
             const inputType = isNumber ? 'number' : 'text';
-            const valAttr = isBool ? (value ? 'true' : 'false') : escapeHtml(String(value));
-            const controlHTML = isBool
-                ? `<select data-cfg-key="${escapeHtml(key)}">
-                     <option value="true" ${value ? 'selected' : ''}>true</option>
-                     <option value="false" ${!value ? 'selected' : ''}>false</option>
-                   </select>`
-                : `<input type="${inputType}" data-cfg-key="${escapeHtml(key)}" value="${valAttr}" ${isNumber ? 'step="any"' : ''}>`;
+            const valAttr = isBool ? (value ? 'true' : 'false')
+                : escapeHtml(isArr || isObjStr ? JSON.stringify(value) : String(value));
+            const typeLabel = isBool ? 'boolean' : isNumber ? 'number'
+                : isArr ? 'array' : isObjStr ? 'object' : typeof value;
+
+            let controlHTML;
+            if (isBool) {
+                controlHTML = `<select data-cfg-key="${escapeHtml(key)}" data-cfg-type="boolean">
+                    <option value="true" ${value ? 'selected' : ''}>true</option>
+                    <option value="false" ${!value ? 'selected' : ''}>false</option>
+                </select>`;
+            } else if (isNumber) {
+                controlHTML = `<input type="number" data-cfg-key="${escapeHtml(key)}" data-cfg-type="number" value="${valAttr}" step="any">`;
+            } else if (isArr || isObjStr) {
+                controlHTML = `<input type="text" data-cfg-key="${escapeHtml(key)}" data-cfg-type="json" value="${valAttr}" step="any">`;
+            } else {
+                controlHTML = `<input type="${inputType}" data-cfg-key="${escapeHtml(key)}" data-cfg-type="string" value="${valAttr}" step="any">`;
+            }
             return `<div class="setting-item">
-                <label>${escapeHtml(key)} <span class="path">(${typeof value})</span></label>
+                <label>${escapeHtml(key)} <span class="path">(${typeLabel})</span></label>
                 ${controlHTML}
             </div>`;
         }).join('');
+
+        // 对含 min/max 的设置输入也做校验
+        els.settingsGrid.querySelectorAll('input[min], input[max]').forEach(inp => {
+            inp.addEventListener('blur', () => validateInput(inp));
+            inp.addEventListener('input', () => inp.classList.remove('input-invalid'));
+        });
     }
 
     async function saveConfig() {
         try {
             const inputs = els.settingsGrid.querySelectorAll('[data-cfg-key]');
-            const updated = { ...configData };
+            const updatedFlat = {};
             inputs.forEach(el => {
                 const key = el.getAttribute('data-cfg-key');
+                const type = el.getAttribute('data-cfg-type');
                 let val = el.value;
-                // 类型转换
-                if (typeof configData[key] === 'number') {
+                if (type === 'number') {
                     val = Number(val);
-                } else if (typeof configData[key] === 'boolean') {
+                    if (isNaN(val)) val = 0;
+                } else if (type === 'boolean') {
                     val = (val === 'true');
+                } else if (type === 'json') {
+                    try { val = JSON.parse(val); }
+                    catch (e) { /* 解析失败保留字符串 */ }
                 }
-                updated[key] = val;
+                updatedFlat[key] = val;
             });
+
+            // 合并原有拍平字段（防止渲染时被 skip 的字段丢失）
+            const mergedFlat = Object.assign({}, configFlat, updatedFlat);
+            const updated = unflattenConfig(mergedFlat);
 
             const res = await fetch('/api/config', {
                 method: 'PUT',
@@ -448,6 +635,7 @@
                 throw new Error(result.error_message || '保存失败');
             }
             configData = updated;
+            configFlat = mergedFlat;
             showSaveStatus('success', '已保存');
         } catch (e) {
             showSaveStatus('error', `失败: ${e.message}`);
@@ -468,19 +656,68 @@
     }
 
     /* ============================================================
+       参数校验：min/max 红边框 + tooltip
+       ============================================================ */
+    function validateInput(inp) {
+        const raw = inp.value;
+        if (raw === '' || raw == null) {
+            inp.classList.remove('input-invalid');
+            inp.removeAttribute('data-invalid-msg');
+            inp.removeAttribute('title');
+            return true;
+        }
+        const num = Number(raw);
+        const min = inp.getAttribute('min');
+        const max = inp.getAttribute('max');
+        let msg = '';
+        if (min != null && min !== '' && num < Number(min)) {
+            msg = `不能小于 ${min}`;
+        } else if (max != null && max !== '' && num > Number(max)) {
+            msg = `不能大于 ${max}`;
+        }
+        if (msg) {
+            inp.classList.add('input-invalid');
+            inp.setAttribute('data-invalid-msg', msg);
+            inp.setAttribute('title', `取值范围 ${min ?? '−∞'} ~ ${max ?? '+∞'}：${msg}`);
+            return false;
+        }
+        inp.classList.remove('input-invalid');
+        inp.removeAttribute('data-invalid-msg');
+        inp.removeAttribute('title');
+        return true;
+    }
+
+    function validateAllParams() {
+        let ok = true;
+        document.querySelectorAll('.control-bar input[min], .control-bar input[max]').forEach(inp => {
+            if (!validateInput(inp)) ok = false;
+        });
+        return ok;
+    }
+
+    /* ============================================================
        生成决策报告
        ============================================================ */
     async function generateReport() {
-        const stockCode = els.stockSelect.value;
+        const stockCode = els.stockSelect.value.trim();
         if (!stockCode) {
             showAlert('warn', '请先选择股票标的');
             return;
         }
-        // 检查输入是否匹配 datalist 中的选项
-        const datalist = document.getElementById('stock-datalist');
-        const options = Array.from(datalist.options).map(o => o.value);
-        if (!options.includes(stockCode)) {
+        // 校验必须为股票列表中的有效代码
+        const match = stocks.find(s => s.code === stockCode);
+        if (!match) {
+            els.stockSelect.classList.add('input-invalid');
+            els.stockSelect.setAttribute('title', '请从下拉列表中选择有效的股票代码');
             showAlert('warn', '请从下拉列表中选择有效的股票代码');
+            return;
+        }
+        els.stockSelect.classList.remove('input-invalid');
+        els.stockSelect.removeAttribute('title');
+
+        // 参数范围校验
+        if (!validateAllParams()) {
+            showAlert('warn', '存在超出范围的参数，请检查红色边框输入框');
             return;
         }
 
@@ -551,7 +788,7 @@
         // ---- 信号卡片 ----
         els.signalCard.className = `signal-card signal-${map.cls}`;
         els.signalZh.textContent = map.zh;
-        els.signalEn.textContent = map.zh;
+        els.signalEn.textContent = signalStr;  // 英文信号 BUY/SELL/HOLD
         els.signalReason.textContent = sig.signal_reason || '（无决策理由说明）';
         els.signalStockLabel.innerHTML =
             `<span class="stock-code">${escapeHtml(report.stock_code || '--')}</span>` +
@@ -580,7 +817,6 @@
     }
 
     function renderTrend(trend, map, sig) {
-        // 方向箭头
         const dirStr = trend.direction || map.arrow;
         const arrowChar = deriveArrow(dirStr, map);
         els.trendArrow.textContent = arrowChar;
@@ -589,18 +825,15 @@
         els.trendDirectionValue.textContent = map.dirText;
         els.trendDirectionValue.className = 'trend-direction-value ' + map.dirCls;
 
-        // 置信度
         const conf = (trend.confidence || '中').toString();
         els.trendConfidence.textContent = `${conf}置信`;
         els.trendConfidence.className = 'confidence-badge ' +
             (conf.includes('高') ? 'high' : conf.includes('低') ? 'low' : 'medium');
 
-        // 趋势强度
         const strength = parseFloat(trend.strength) || 0;
         els.trendStrengthValue.textContent = strength.toFixed(2);
         els.trendStrengthFill.style.width = `${Math.min(100, Math.max(0, strength * 100))}%`;
 
-        // 上涨概率
         const upProb = parseFloat(trend.up_probability);
         if (!isNaN(upProb)) {
             els.trendUpProb.textContent = upProb.toFixed(2);
@@ -609,10 +842,8 @@
             els.trendUpProb.textContent = '--';
         }
 
-        // 一致性
-        const consistency = trend.consistency || sig?.score_detail?.consistency || '--';
-        // 从 score_detail 取一致性兜底
-        els.trendConsistency.textContent = consistency;
+        const consistency = trend.consistency || (sig && sig.score_detail && sig.score_detail.consistency) || '--';
+        els.trendConsistency.textContent = safeDisplay(consistency);
     }
 
     function deriveArrow(dirStr, map) {
@@ -623,29 +854,27 @@
     }
 
     function renderRisk(risk) {
-        // VaR 95%
+        // VaR 95% — 始终红色，带负号的绝对值
         const varVal = parseFloat(risk.var_95);
         if (!isNaN(varVal)) {
-            const pct = (varVal * 100).toFixed(2);
-            els.riskVar.textContent = `${pct}%`;
-            els.riskVar.className = 'risk-item-value ' + (varVal < 0 ? 'negative' : 'positive');
+            const pct = (Math.abs(varVal) * 100).toFixed(2);
+            els.riskVar.textContent = `-${pct}%`;
+            els.riskVar.className = 'risk-item-value negative';
         } else {
             els.riskVar.textContent = '--';
+            els.riskVar.className = 'risk-item-value negative';
         }
 
-        // 波动率
-        const vol = (risk.volatility || '--').toString();
+        const vol = safeDisplay(risk.volatility || '--');
         els.riskVolatility.textContent = vol;
         els.riskVolatility.className = 'risk-item-value ' + (RISK_LEVEL_MAP[vol] || '');
 
-        // 反转风险
-        const rev = (risk.reversal_risk || '--').toString();
+        const rev = safeDisplay(risk.reversal_risk || '--');
         els.riskReversal.textContent = rev;
         els.riskReversal.className = 'risk-item-value ' + (RISK_LEVEL_MAP[rev] || '');
     }
 
     function renderScoreDetail(detail, trend, risk) {
-        // 评分详情：合并 score_detail 各字段，附说明
         const rows = [];
         const descriptions = {
             trend_strength: '趋势方向强度量化值（0-1）',
@@ -664,35 +893,39 @@
             consistency: '一致性',
         };
 
-        Object.entries(detail).forEach(([key, val]) => {
+        Object.entries(detail || {}).forEach(([key, val]) => {
             let displayVal = val;
             let valCls = '';
             if (key === 'var_95') {
                 const n = parseFloat(val);
                 if (!isNaN(n)) {
-                    displayVal = `${(n * 100).toFixed(2)}%`;
-                    valCls = n < 0 ? 'down' : 'up';
+                    displayVal = `-${(Math.abs(n) * 100).toFixed(2)}%`;
+                    valCls = 'down';
+                } else {
+                    displayVal = safeDisplay(val);
                 }
             } else if (key === 'trend_strength' || key === 'up_probability') {
                 const n = parseFloat(val);
                 if (!isNaN(n)) {
                     displayVal = n.toFixed(2);
                     if (key === 'up_probability') valCls = n >= 0.5 ? 'up' : 'down';
+                } else {
+                    displayVal = safeDisplay(val);
                 }
             } else if (typeof val === 'string' && RISK_LEVEL_MAP[val]) {
-                // 低/中/高的级别值着色
                 if (val === '低') valCls = 'up';
                 else if (val === '高') valCls = 'down';
                 else valCls = 'warn';
+            } else if (typeof val === 'object') {
+                displayVal = safeDisplay(val);
             }
             rows.push(`<tr>
                 <td class="metric-name">${escapeHtml(zhLabels[key] || key)}</td>
-                <td class="metric-value ${valCls}">${escapeHtml(String(displayVal))}</td>
+                <td class="metric-value ${valCls}">${escapeHtml(safeDisplay(displayVal))}</td>
                 <td>${escapeHtml(descriptions[key] || '')}</td>
             </tr>`);
         });
 
-        // 兜底：如果 score_detail 为空，从 trend / risk 补
         if (rows.length === 0) {
             if (trend && trend.strength != null) {
                 rows.push(magicRow('trend_strength', trend.strength, descriptions.trend_strength));
@@ -723,21 +956,24 @@
         let display = val, cls = '';
         if (name === 'var_95') {
             const n = parseFloat(val);
-            if (!isNaN(n)) { display = `${(n * 100).toFixed(2)}%`; cls = n < 0 ? 'down' : 'up'; }
+            if (!isNaN(n)) { display = `-${(Math.abs(n) * 100).toFixed(2)}%`; cls = 'down'; }
+            else display = safeDisplay(val);
         } else if (name === 'trend_strength' || name === 'up_probability') {
             const n = parseFloat(val);
             if (!isNaN(n)) { display = n.toFixed(2); if (name === 'up_probability') cls = n >= 0.5 ? 'up' : 'down'; }
+            else display = safeDisplay(val);
+        } else if (typeof val === 'object') {
+            display = safeDisplay(val);
         }
         if (!desc) {
-            const descriptions = {
+            desc = ({
                 trend_strength: '趋势方向强度量化值（0-1）',
                 up_probability: '预测区间内上涨概率',
                 var_95: '95% 置信区间最大日跌幅（负值代表损失）',
                 volatility: '预测区间价格波动级别',
                 reversal_risk: '趋势反转可能性级别',
                 consistency: '多维度指标一致性评估',
-            };
-            desc = descriptions[name] || '';
+            })[name] || '';
         }
         const zhLabels = {
             trend_strength: '趋势强度',
@@ -749,26 +985,18 @@
         };
         return `<tr>
             <td class="metric-name">${escapeHtml(zhLabels[name] || name)}</td>
-            <td class="metric-value ${cls}">${escapeHtml(String(display))}</td>
+            <td class="metric-value ${cls}">${escapeHtml(safeDisplay(display))}</td>
             <td>${escapeHtml(desc)}</td>
         </tr>`;
     }
 
     /* ============================================================
-       渲染预测图表（Chart.js K线 / 折线）
+       Canvas 真实 OHLC 蜡烛图
        ============================================================ */
-    function renderChart(prediction, stockCode, stockName) {
-        if (predictionChart) {
-            predictionChart.destroy();
-            predictionChart = null;
-        }
-
+    function parsePredictionRows(prediction) {
         const predDf = prediction && prediction.pred_df;
-
-        // pred_df 可能是 {columns: [...], data: [[...], ...]} 结构 或 {timestamps: [...], open: [...], ...}
         let rows = [];
         if (predDf && Array.isArray(predDf.columns) && Array.isArray(predDf.data)) {
-            // 表格格式
             const cols = predDf.columns;
             rows = predDf.data.map(r => {
                 const obj = {};
@@ -776,7 +1004,6 @@
                 return obj;
             });
         } else if (predDf && Array.isArray(predDf.columns)) {
-            // 列式格式
             const cols = predDf.columns;
             const len = cols.reduce((m, c) => Math.max(m, Array.isArray(predDf[c]) ? predDf[c].length : 0), 0);
             for (let i = 0; i < len; i++) {
@@ -787,146 +1014,202 @@
         } else if (Array.isArray(predDf)) {
             rows = predDf;
         }
+        return rows;
+    }
 
+    function renderChart(prediction, stockCode, stockName) {
+        // 清理旧状态
+        if (chartResizeHandler) {
+            window.removeEventListener('resize', chartResizeHandler);
+            chartResizeHandler = null;
+        }
+        hideChartTooltip();
+
+        const rows = parsePredictionRows(prediction);
         if (!rows.length) {
             els.chartTag.textContent = '无数据';
+            chartState = null;
+            const ctx = els.chartCanvas.getContext('2d');
+            ctx && ctx.clearRect(0, 0, els.chartCanvas.width, els.chartCanvas.height);
             return;
         }
 
         const tsKey = rows[0].hasOwnProperty('timestamp') ? 'timestamp'
             : rows[0].hasOwnProperty('timestamps') ? 'timestamps' : null;
 
-        const labels = rows.map((r, i) => tsKey ? r[tsKey] : `T+${i + 1}`);
-        const closes = rows.map(r => r.close != null ? Number(r.close) : null);
-        const opens = rows.map(r => r.open != null ? Number(r.open) : null);
-        const highs = rows.map(r => r.high != null ? Number(r.high) : null);
-        const lows = rows.map(r => r.low != null ? Number(r.low) : null);
+        const candles = rows.map((r, i) => ({
+            label: tsKey ? r[tsKey] : `T+${i + 1}`,
+            o: r.open != null ? Number(r.open) : null,
+            h: r.high != null ? Number(r.high) : null,
+            l: r.low != null ? Number(r.low) : null,
+            c: r.close != null ? Number(r.close) : null,
+        }));
 
-        const ctx = els.chartArea.getContext('2d');
+        chartState = { candles, stockCode, stockName };
+        drawChart();
+        chartResizeHandler = () => drawChart();
+        window.addEventListener('resize', chartResizeHandler);
 
-        // K线用 custom 渲染较复杂，这里用 close 折线 + 加权区间区域
-        const upDown = rows.map((r, i) => {
-            if (r.close == null || r.open == null) return 0;
-            return Number(r.close) >= Number(r.open) ? 1 : 0;
+        els.chartTag.textContent = `${candles.length} 点预测`;
+    }
+
+    function drawChart() {
+        if (!chartState) return;
+        const { candles } = chartState;
+        const canvas = els.chartCanvas;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const parent = canvas.parentElement;
+        const cssW = Math.max(1, parent.clientWidth);
+        const cssH = Math.max(1, parent.clientHeight);
+
+        canvas.width = Math.floor(cssW * dpr);
+        canvas.height = Math.floor(cssH * dpr);
+        canvas.style.width = cssW + 'px';
+        canvas.style.height = cssH + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssW, cssH);
+
+        const padL = 58, padR = 18, padT = 14, padB = 30;
+        const w = cssW - padL - padR;
+        const h = cssH - padT - padB;
+
+        // 价格区间
+        let minP = Infinity, maxP = -Infinity;
+        candles.forEach(c => {
+            [c.o, c.h, c.l, c.c].forEach(v => {
+                if (!isNaN(v) && v != null) {
+                    if (v < minP) minP = v;
+                    if (v > maxP) maxP = v;
+                }
+            });
+        });
+        if (!isFinite(minP) || !isFinite(maxP)) { minP = 0; maxP = 1; }
+        const rangeP = (maxP - minP) || 1;
+        const padP = rangeP * 0.06;
+        minP -= padP;
+        maxP += padP;
+
+        const xFor = (i) => padL + (candles.length <= 1 ? w / 2 : (i / (candles.length - 1)) * w);
+        const yFor = (p) => padT + (1 - (p - minP) / (maxP - minP)) * h;
+
+        // 网格 + Y 轴刻度
+        ctx.strokeStyle = 'rgba(35, 43, 57, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#5a6675';
+        ctx.font = "10px 'JetBrains Mono', 'SF Mono', Consolas, monospace";
+        ctx.textBaseline = 'middle';
+        const ticks = 5;
+        for (let i = 0; i <= ticks; i++) {
+            const p = minP + (maxP - minP) * i / ticks;
+            const y = yFor(p);
+            ctx.beginPath();
+            ctx.moveTo(padL, y);
+            ctx.lineTo(padL + w, y);
+            ctx.stroke();
+            ctx.textAlign = 'right';
+            ctx.fillText(p.toFixed(2), padL - 8, y);
+        }
+
+        // X 轴刻度
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const maxLabels = Math.min(8, candles.length);
+        for (let i = 0; i < maxLabels; i++) {
+            const denom = Math.max(1, maxLabels - 1);
+            const idx = Math.floor(i * (candles.length - 1) / denom);
+            const x = xFor(idx);
+            const lab = String(candles[idx].label ?? '');
+            const text = lab.length > 10 ? lab.slice(-10) : lab;
+            ctx.fillText(text, x, padT + h + 6);
+        }
+
+        // 蜡烛
+        const upColor = '#ff1744';   // A股：红涨
+        const downColor = '#00c853'; // A股：绿跌
+        const bodyW = Math.max(1, Math.min(12, Math.floor(w / candles.length * 0.62)));
+
+        candles.forEach((c, i) => {
+            if (c.o == null || c.h == null || c.l == null || c.c == null) return;
+            const x = xFor(i);
+            const up = c.c >= c.o;
+            const col = up ? upColor : downColor;
+            ctx.strokeStyle = col;
+            ctx.fillStyle = col;
+            ctx.lineWidth = 1;
+
+            // 影线
+            ctx.beginPath();
+            ctx.moveTo(x, yFor(c.h));
+            ctx.lineTo(x, yFor(c.l));
+            ctx.stroke();
+
+            // 实体
+            const yO = yFor(c.o);
+            const yC = yFor(c.c);
+            const top = Math.min(yO, yC);
+            const bh = Math.max(1, Math.abs(yO - yC));
+            ctx.fillRect(x - bodyW / 2, top, bodyW, bh);
         });
 
-        // 构建高低区间填充
-        const highLowDatasets = highs.map((h, i) => h != null && lows[i] != null).every(Boolean)
-            ? [{
-                label: '波动区间',
-                data: highs.map((h, i) => ({ x: labels[i], y: h })),
-                borderColor: 'transparent',
-                backgroundColor: 'rgba(0, 212, 170, 0.08)',
-                pointRadius: 0,
-                fill: '+1',
-                tension: 0.25,
-                order: 2,
-            }, {
-                label: '波动区间(下)',
-                data: lows.map((l, i) => ({ x: labels[i], y: l })),
-                borderColor: 'transparent',
-                backgroundColor: 'transparent',
-                pointRadius: 0,
-                fill: false,
-                tension: 0.25,
-                order: 2,
-            }]
-            : [];
+        // 上下边界线
+        ctx.strokeStyle = '#232b39';
+        ctx.beginPath();
+        ctx.moveTo(padL, padT);
+        ctx.lineTo(padL, padT + h);
+        ctx.lineTo(padL + w, padT + h);
+        ctx.stroke();
+    }
 
-        predictionChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    ...highLowDatasets,
-                    {
-                        label: '收盘价',
-                        data: closes,
-                        borderColor: '#00d4aa',
-                        backgroundColor: 'rgba(0, 212, 170, 0.12)',
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        pointHoverRadius: 5,
-                        pointHoverBackgroundColor: '#00d4aa',
-                        pointHoverBorderColor: '#0a0e17',
-                        pointHoverBorderWidth: 2,
-                        fill: true,
-                        tension: 0.25,
-                        order: 1,
-                        segment: {
-                            borderColor: (ctx) => {
-                                const i = ctx.p0DataIndex;
-                                return upDown[i] === 1 ? '#00c853' : '#ff1744';
-                            },
-                        },
-                    },
-                    {
-                        label: '开盘价',
-                        data: opens,
-                        borderColor: 'rgba(139, 152, 168, 0.5)',
-                        borderWidth: 1,
-                        borderDash: [4, 4],
-                        pointRadius: 0,
-                        tension: 0.25,
-                        fill: false,
-                        order: 3,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                animation: { duration: 800, easing: 'easeOutQuart' },
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: '#8b98a8',
-                            font: { family: "'JetBrains Mono', monospace", size: 11 },
-                            usePointStyle: true,
-                            boxWidth: 8,
-                            filter: (item) => item.text !== '波动区间(下)',
-                        },
-                    },
-                    tooltip: {
-                        backgroundColor: '#0d121b',
-                        borderColor: '#2d3647',
-                        borderWidth: 1,
-                        titleColor: '#e6edf3',
-                        bodyColor: '#8b98a8',
-                        titleFont: { family: "'JetBrains Mono', monospace", size: 12 },
-                        bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
-                        padding: 12,
-                        cornerRadius: 6,
-                        displayColors: true,
-                    },
-                },
-                scales: {
-                    x: {
-                        ticks: {
-                            color: '#5a6675',
-                            font: { family: "'JetBrains Mono', monospace", size: 10 },
-                            maxRotation: 0,
-                            autoSkip: true,
-                            maxTicksLimit: 12,
-                        },
-                        grid: { color: 'rgba(35, 43, 57, 0.5)', drawTicks: false },
-                        border: { color: '#232b39' },
-                    },
-                    y: {
-                        ticks: {
-                            color: '#5a6675',
-                            font: { family: "'JetBrains Mono', monospace", size: 10 },
-                            callback: (v) => v.toFixed(2),
-                        },
-                        grid: { color: 'rgba(35, 43, 57, 0.5)', drawTicks: false },
-                        border: { color: '#232b39' },
-                    },
-                },
-            },
+    /* ---- 图表悬停 tooltip ---- */
+    function bindChartHover() {
+        els.chartCanvas.addEventListener('mousemove', (e) => {
+            if (!chartState) { hideChartTooltip(); return; }
+            const rect = els.chartCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const { candles } = chartState;
+            const padL = 58, padR = 18;
+            const w = rect.width - padL - padR;
+            if (x < padL || x > padL + w) { hideChartTooltip(); return; }
+            const idx = candles.length <= 1 ? 0
+                : Math.round((x - padL) / Math.max(1, w) * (candles.length - 1));
+            const clamped = Math.max(0, Math.min(candles.length - 1, idx));
+            const c = candles[clamped];
+            if (c.o == null && c.c == null) { hideChartTooltip(); return; }
+            const up = (c.c != null && c.o != null) ? c.c >= c.o : true;
+            const lines = [
+                `<div class="tt-label">${escapeHtml(safeDisplay(c.label))}</div>`,
+                `<div class="tt-row"><span>开</span><b>${fmtNum(c.o)}</b></div>`,
+                `<div class="tt-row"><span>高</span><b>${fmtNum(c.h)}</b></div>`,
+                `<div class="tt-row"><span>低</span><b>${fmtNum(c.l)}</b></div>`,
+                `<div class="tt-row"><span>收</span><b class="${up ? 'up' : 'down'}">${fmtNum(c.c)}</b></div>`,
+            ];
+            els.chartTooltip.innerHTML = lines.join('');
+            els.chartTooltip.hidden = false;
+            // 定位（不超出容器右侧）
+            const tipW = els.chartTooltip.offsetWidth;
+            const tipH = els.chartTooltip.offsetHeight;
+            let left = x + 14;
+            let top = y + 14;
+            if (left + tipW > rect.width - 4) left = x - tipW - 14;
+            if (top + tipH > rect.height - 4) top = y - tipH - 14;
+            els.chartTooltip.style.left = Math.max(0, left) + 'px';
+            els.chartTooltip.style.top = Math.max(0, top) + 'px';
         });
+        els.chartCanvas.addEventListener('mouseleave', hideChartTooltip);
+    }
 
-        els.chartTag.textContent = `${rows.length} 点预测`;
+    function hideChartTooltip() {
+        if (els.chartTooltip) {
+            els.chartTooltip.hidden = true;
+            els.chartTooltip.innerHTML = '';
+        }
+    }
+
+    function fmtNum(v) {
+        if (v == null || isNaN(v)) return '--';
+        return Number(v).toFixed(2);
     }
 
     /* ============================================================
