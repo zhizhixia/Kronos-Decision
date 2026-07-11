@@ -697,6 +697,72 @@ def get_model_status():
             'message': 'Kronos model library not available, please install related dependencies'
         })
 
+# === 决策报告 API ===
+
+@app.route("/report")
+def report_page():
+    """决策报告页面。"""
+    return render_template("report.html")
+
+
+@app.route("/api/decision-report", methods=["POST"])
+def api_decision_report():
+    """生成决策报告。
+
+    请求: {"stock_code": "600519", "pred_len": 120, ...}
+    响应: DecisionReport 的 JSON 序列化
+    """
+    from decision.engine import DecisionEngine
+    import dataclasses, json
+
+    data = request.get_json() or {}
+    stock_code = data.get("stock_code", "")
+    if not stock_code:
+        return jsonify({"status": "error", "error_message": "请提供股票代码"}), 400
+
+    engine = DecisionEngine()
+    report = engine.predict_and_analyze(stock_code, data)
+    return jsonify(dataclasses.asdict(report))
+
+
+@app.route("/api/stock-list")
+def api_stock_list():
+    """获取股票池列表。"""
+    try:
+        from data.pool import get_hs300_pool
+        pool = get_hs300_pool()
+        stocks = [{"code": k, "name": v} for k, v in pool.items()]
+        return jsonify({"status": "ok", "stocks": stocks})
+    except Exception as e:
+        return jsonify({"status": "error", "error_message": str(e)}), 500
+
+
+@app.route("/api/config", methods=["GET", "PUT"])
+def api_config():
+    """获取或更新配置。"""
+    from decision.config import get_config, reload_config, save_config
+    import dataclasses
+
+    if request.method == "GET":
+        cfg = get_config()
+        return jsonify(dataclasses.asdict(cfg))
+
+    if request.method == "PUT":
+        try:
+            data = request.get_json()
+            cfg = get_config()
+            for section, values in data.items():
+                if hasattr(cfg, section):
+                    sub = getattr(cfg, section)
+                    for key, val in values.items():
+                        if hasattr(sub, key):
+                            setattr(sub, key, val)
+            save_config(cfg)
+            return jsonify({"status": "ok", "message": "配置已更新"})
+        except Exception as e:
+            return jsonify({"status": "error", "error_message": str(e)}), 400
+
+
 if __name__ == '__main__':
     print("Starting Kronos Web UI...")
     print(f"Model availability: {MODEL_AVAILABLE}")
