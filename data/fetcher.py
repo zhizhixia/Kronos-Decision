@@ -180,16 +180,16 @@ class DataFetcher:
             )
 
     def _cache_path(self, stock_code: str) -> Path:
-        return self._cache_dir / f"{stock_code}.parquet"
+        return self._cache_dir / f"{stock_code}.csv"
 
     def _load_cache(self, stock_code: str) -> pd.DataFrame | None:
         path = self._cache_path(stock_code)
         if path.exists():
-            return pd.read_parquet(path)
+            return pd.read_csv(path, parse_dates=["date"])
         return None
 
     def _save_cache(self, stock_code: str, df: pd.DataFrame) -> None:
-        df.to_parquet(self._cache_path(stock_code), index=False)
+        df.to_csv(self._cache_path(stock_code), index=False)
 
     def _is_cache_fresh(self, stock_code: str) -> bool:
         """判断缓存是否在有效期内。今日收盘后（16:00）缓存视为过期。"""

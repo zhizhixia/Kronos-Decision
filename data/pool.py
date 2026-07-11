@@ -1,6 +1,6 @@
 """沪深 300 股票池管理。
 
-通过 akshare 动态获取最新成分股，本地缓存每周自动刷新。
+通过 akshare 动态获取最新成分股，本地 CSV 缓存每周自动刷新。
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from decision.config import get_config
 
-_CACHE_PATH = Path(get_config().data.cache_dir) / "pool_hs300.parquet"
+_CACHE_PATH = Path(get_config().data.cache_dir) / "pool_hs300.csv"
 _REFRESH_INTERVAL_DAYS = 7
 
 
@@ -44,7 +44,6 @@ def get_hs300_pool() -> dict[str, str]:
 def _fetch_from_akshare() -> dict[str, str]:
     import akshare as ak
     df = ak.index_stock_cons(symbol="000300")
-    # akshare 返回列: "品种代码", "品种名称"
     code_col = next(c for c in ["品种代码", "constituent_code"] if c in df.columns)
     name_col = next(c for c in ["品种名称", "constituent_name"] if c in df.columns)
     pool = {}
@@ -59,7 +58,7 @@ def _load_cache() -> dict[str, str] | None:
     if not _CACHE_PATH.exists():
         return None
     import pandas as pd
-    df = pd.read_parquet(_CACHE_PATH)
+    df = pd.read_csv(_CACHE_PATH, dtype=str)
     return dict(zip(df["code"], df["name"]))
 
 
@@ -67,7 +66,7 @@ def _save_cache(pool: dict[str, str]) -> None:
     import pandas as pd
     df = pd.DataFrame(pool.items(), columns=["code", "name"])
     _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(_CACHE_PATH, index=False)
+    df.to_csv(_CACHE_PATH, index=False)
 
 
 def _is_fresh() -> bool:

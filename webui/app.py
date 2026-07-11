@@ -329,8 +329,9 @@ def create_prediction_chart(df, pred_df, lookback, pred_len, actual_df=None, his
 
 @app.route('/')
 def index():
-    """Home page"""
-    return render_template('index.html')
+    """重定向到决策报告页面。"""
+    from flask import redirect
+    return redirect('/report')
 
 @app.route('/api/data-files')
 def get_data_files():
