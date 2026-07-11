@@ -755,8 +755,8 @@
                 showAlert('warn', `降级运行: ${report.error_message || '部分功能不可用'}`);
             }
 
-            renderReport(report);
             els.reportSection.classList.add('active');
+            renderReport(report);
         } catch (e) {
             showAlert('error', `生成报告失败: ${e.message}`);
             els.emptyState.style.display = 'flex';
