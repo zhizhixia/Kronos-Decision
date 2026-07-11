@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kronos 决策系统 | 交易信号分析</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Chart.js 用于预测走势图 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- chartjs-adapter-date-fns 用于时间轴 -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+<div class="container">
+
+    <!-- ============================================================ -->
+    <!-- 顶部标题栏 -->
+    <!-- ============================================================ -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="topbar-logo">K</div>
+            <div class="topbar-title">
+                <h1>Kronos 决策系统</h1>
+                <span class="subtitle">交易信号分析 · A股日频</span>
+            </div>
+        </div>
+        <div class="topbar-meta">
+            <span class="meta-item"><span class="live-dot"></span>实时决策引擎</span>
+            <span class="meta-item" id="meta-time">--:--:--</span>
+        </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- 控制 / 搜索栏 -->
+    <!-- ============================================================ -->
+    <section class="control-bar">
+        <!-- 股票代码搜索 -->
+        <div class="search-bar">
+            <label>股票标的</label>
+            <div class="select-wrap">
+                <select id="stock-select" aria-label="选择股票">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 预测长度 -->
+        <div class="param-field">
+            <label>预测长度</label>
+            <input type="number" id="pred-len" value="120" min="10" max="512" step="10">
+        </div>
+
+        <!-- 温度 -->
+        <div class="param-field">
+            <label>温度 T</label>
+            <input type="number" id="temperature" value="1.2" min="0.1" max="2.0" step="0.1">
+        </div>
+
+        <!-- Top-P -->
+        <div class="param-field">
+            <label>Top-P</label>
+            <input type="number" id="top-p" value="0.95" min="0.1" max="1.0" step="0.05">
+        </div>
+
+        <!-- 生成按钮 -->
+        <button class="btn-generate" id="generate-btn" type="button">
+            <span class="btn-icon">▶</span>
+            <span>生成报告</span>
+        </button>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 加载状态 -->
+    <!-- ============================================================ -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">分析中<span class="ellipsis"></span></div>
+        <div class="progress-bar indeterminate">
+            <div class="progress-fill"></div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 错误 / 降级提示 -->
+    <!-- ============================================================ -->
+    <div id="alert-area"></div>
+
+    <!-- ============================================================ -->
+    <!-- 报告主体区域（生成后显示） -->
+    <!-- ============================================================ -->
+    <section class="report-section" id="report-section">
+
+        <!-- 信号卡片 + 标的信息 -->
+        <div class="grid-3">
+            <!-- 信号卡片 -->
+            <div class="signal-card signal-buy" id="signal-card">
+                <div class="signal-card-header">
+                    <span class="signal-card-label">决策信号</span>
+                    <span class="signal-card-stock" id="signal-stock-label">
+                        <span class="stock-code">--</span> · --
+                    </span>
+                </div>
+                <div class="signal-card-recommendation" id="signal-zh">买入</div>
+                <div class="signal-card-signal-en" id="signal-en">BUY</div>
+                <div class="signal-card-reason" id="signal-reason">
+                    等待生成报告...
+                </div>
+            </div>
+
+            <!-- 趋势分析面板 -->
+            <div class="data-panel">
+                <div class="panel-header">
+                    <h2><span class="header-icon">↗</span>趋势分析</h2>
+                    <span class="header-tag">TREND</span>
+                </div>
+                <div class="trend-indicator" id="trend-area">
+                    <div class="trend-row">
+                        <div class="trend-direction">
+                            <div class="trend-arrow up" id="trend-arrow">↑</div>
+                            <div class="trend-direction-text">
+                                <span class="trend-direction-label">方向</span>
+                                <span class="trend-direction-value up" id="trend-direction-value">上行</span>
+                            </div>
+                        </div>
+                        <span class="confidence-badge high" id="trend-confidence">高置信</span>
+                    </div>
+                    <div class="trend-strength">
+                        <div class="trend-strength-header">
+                            <span class="trend-strength-label">趋势强度</span>
+                            <span class="trend-strength-value" id="trend-strength-value">0.85</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="trend-strength-fill"></div>
+                        </div>
+                    </div>
+                    <div class="trend-metric-grid">
+                        <div class="trend-metric">
+                            <div class="trend-metric-label">上涨概率</div>
+                            <div class="trend-metric-value up" id="trend-up-prob">--</div>
+                        </div>
+                        <div class="trend-metric">
+                            <div class="trend-metric-label">一致性</div>
+                            <div class="trend-metric-value" id="trend-consistency">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 风险评估面板 -->
+            <div class="data-panel">
+                <div class="panel-header">
+                    <h2><span class="header-icon">⚠</span>风险评估</h2>
+                    <span class="header-tag">RISK</span>
+                </div>
+                <div class="risk-panel">
+                    <div class="risk-item">
+                        <div class="risk-item-info">
+                            <span class="risk-item-label">VaR 95%</span>
+                            <span class="risk-item-desc">95% 置信下最大日跌幅</span>
+                        </div>
+                        <span class="risk-item-value negative" id="risk-var">--</span>
+                    </div>
+                    <div class="risk-item">
+                        <div class="risk-item-info">
+                            <span class="risk-item-label">波动率</span>
+                            <span class="risk-item-desc">预测区间价格波动</span>
+                        </div>
+                        <span class="risk-item-value" id="risk-volatility">--</span>
+                    </div>
+                    <div class="risk-item">
+                        <div class="risk-item-info">
+                            <span class="risk-item-label">反转风险</span>
+                            <span class="risk-item-desc">趋势反转可能性</span>
+                        </div>
+                        <span class="risk-item-value" id="risk-reversal">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 评分详情表格 -->
+        <div class="data-panel" style="margin-bottom:24px;">
+            <div class="panel-header">
+                <h2><span class="header-icon">▦</span>评分详情</h2>
+                <span class="header-tag">SCORE DETAIL</span>
+            </div>
+            <div class="data-table-wrap">
+                <table class="data-table" id="score-table">
+                    <thead>
+                        <tr>
+                            <th>指标</th>
+                            <th>数值</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody id="score-table-body">
+                        <!-- 动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 预测走势图 -->
+        <div class="chart-container">
+            <div class="panel-header">
+                <h2><span class="header-icon">📈</span>预测走势</h2>
+                <span class="header-tag" id="chart-tag">PREDICTION</span>
+            </div>
+            <div class="chart-area">
+                <canvas id="prediction-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- 底部信息栏 -->
+        <div class="footer-bar">
+            <div class="footer-item">
+                <span class="label">标的状态</span>
+                <span class="value accent" id="footer-stock">--</span>
+            </div>
+            <div class="footer-item">
+                <span class="label">信号</span>
+                <span class="value" id="footer-signal">--</span>
+            </div>
+            <div class="footer-item">
+                <span class="label">生成时间</span>
+                <span class="value text-mono" id="footer-generated-at">--</span>
+            </div>
+            <div class="footer-item">
+                <span class="label">耗时</span>
+                <span class="value text-mono" id="footer-elapsed">--</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- 空状态（未生成报告时显示） -->
+    <!-- ============================================================ -->
+    <div class="empty-state" id="empty-state">
+        <div class="empty-icon">◉</div>
+        <div class="empty-title">选择股票标的并生成决策报告</div>
+        <div class="empty-desc">
+            调整预测参数后点击「生成报告」按钮，系统将基于 Kronos 预测模型给出买卖信号、趋势分析与风险评估。
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 设置面板（可折叠） -->
+    <!-- ============================================================ -->
+    <div class="settings-panel">
+        <button class="settings-toggle" id="settings-toggle" type="button">
+            <span class="toggle-icon"><span style="color:var(--accent);">⚙</span> 系统配置 · YAML 参数</span>
+            <span class="chevron">▾</span>
+        </button>
+        <div class="settings-body" id="settings-body">
+            <div class="settings-content">
+                <div class="settings-grid" id="settings-grid">
+                    <!-- 动态填充配置字段 -->
+                </div>
+                <button class="btn-save-settings" id="save-settings-btn" type="button">
+                    <span>保存配置</span>
+                </button>
+                <span class="settings-save-status" id="settings-save-status"></span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+/* ================================================================
+   Kronos 决策系统 — 前端逻辑
+   ================================================================ */
+(function() {
+    'use strict';
+
+    // ---- 元素引用 ----
+    const $ = (id) => document.getElementById(id);
+    const els = {
+        stockSelect: $('stock-select'),
+        predLen: $('pred-len'),
+        temperature: $('temperature'),
+        topP: $('top-p'),
+        generateBtn: $('generate-btn'),
+        loadingOverlay: $('loading-overlay'),
+        alertArea: $('alert-area'),
+        reportSection: $('report-section'),
+        emptyState: $('empty-state'),
+        metaTime: $('meta-time'),
+        // signal
+        signalCard: $('signal-card'),
+        signalZh: $('signal-zh'),
+        signalEn: $('signal-en'),
+        signalReason: $('signal-reason'),
+        signalStockLabel: $('signal-stock-label'),
+        // trend
+        trendArrow: $('trend-arrow'),
+        trendDirectionValue: $('trend-direction-value'),
+        trendConfidence: $('trend-confidence'),
+        trendStrengthValue: $('trend-strength-value'),
+        trendStrengthFill: $('trend-strength-fill'),
+        trendUpProb: $('trend-up-prob'),
+        trendConsistency: $('trend-consistency'),
+        // risk
+        riskVar: $('risk-var'),
+        riskVolatility: $('risk-volatility'),
+        riskReversal: $('risk-reversal'),
+        // score table
+        scoreTableBody: $('score-table-body'),
+        // chart
+        chartArea: $('prediction-chart'),
+        chartTag: $('chart-tag'),
+        // footer
+        footerStock: $('footer-stock'),
+        footerSignal: $('footer-signal'),
+        footerGeneratedAt: $('footer-generated-at'),
+        footerElapsed: $('footer-elapsed'),
+        // settings
+        settingsToggle: $('settings-toggle'),
+        settingsBody: $('settings-body'),
+        settingsGrid: $('settings-grid'),
+        saveSettingsBtn: $('save-settings-btn'),
+        settingsSaveStatus: $('settings-save-status'),
+    };
+
+    let predictionChart = null;
+    let configData = {};
+
+    /* ---- 信号映射 ---- */
+    const SIGNAL_MAP = {
+        BUY:  { zh: '买入', cls: 'buy',  arrow: '↑', dirText: '上行', dirCls: 'up'   },
+        SELL: { zh: '卖出', cls: 'sell', arrow: '↓', dirText: '下行', dirCls: 'down' },
+        HOLD: { zh: '观望', cls: 'hold', arrow: '→', dirText: '震荡', dirCls: 'flat' },
+    };
+
+    const RISK_LEVEL_MAP = { 低: 'low', 中: 'medium', 高: 'high' };
+
+    /* ============================================================
+       初始化
+       ============================================================ */
+    function init() {
+        updateClock();
+        setInterval(updateClock, 1000);
+        loadStockList();
+        loadConfig();
+        bindEvents();
+    }
+
+    function updateClock() {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        els.metaTime.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function bindEvents() {
+        els.generateBtn.addEventListener('click', generateReport);
+        els.settingsToggle.addEventListener('click', toggleSettings);
+        els.saveSettingsBtn.addEventListener('click', saveConfig);
+    }
+
+    /* ============================================================
+       加载股票列表
+       ============================================================ */
+    async function loadStockList() {
+        try {
+            const res = await fetch('/api/stock-list');
+            const data = await res.json();
+            if (data.status !== 'ok' && !data.stocks) {
+                throw new Error(data.error_message || '获取股票列表失败');
+            }
+            const stocks = data.stocks || [];
+            els.stockSelect.innerHTML = '<option value="">请选择股票...</option>' +
+                stocks.map(s =>
+                    `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} · ${escapeHtml(s.name)}</option>`
+                ).join('');
+        } catch (e) {
+            els.stockSelect.innerHTML = '<option value="">股票列表加载失败</option>';
+            showAlert('error', `加载股票列表失败: ${e.message}`);
+        }
+    }
+
+    /* ============================================================
+       加载 / 保存配置
+       ============================================================ */
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/config');
+            configData = await res.json();
+            renderConfig(configData);
+        } catch (e) {
+            // 配置加载失败不阻塞主流程
+            console.warn('配置加载失败:', e);
+        }
+    }
+
+    function renderConfig(cfg) {
+        // 渲染可编辑的配置字段（跳过 status 这类元字段）
+        const skipKeys = ['status', 'error_message'];
+        const fields = Object.entries(cfg)
+            .filter(([k]) => !skipKeys.includes(k));
+
+        els.settingsGrid.innerHTML = fields.map(([key, value]) => {
+            const isBool = typeof value === 'boolean';
+            const isNumber = typeof value === 'number';
+            const inputType = isNumber ? 'number' : 'text';
+            const valAttr = isBool ? (value ? 'true' : 'false') : escapeHtml(String(value));
+            const controlHTML = isBool
+                ? `<select data-cfg-key="${escapeHtml(key)}">
+                     <option value="true" ${value ? 'selected' : ''}>true</option>
+                     <option value="false" ${!value ? 'selected' : ''}>false</option>
+                   </select>`
+                : `<input type="${inputType}" data-cfg-key="${escapeHtml(key)}" value="${valAttr}" ${isNumber ? 'step="any"' : ''}>`;
+            return `<div class="setting-item">
+                <label>${escapeHtml(key)} <span class="path">(${typeof value})</span></label>
+                ${controlHTML}
+            </div>`;
+        }).join('');
+    }
+
+    async function saveConfig() {
+        try {
+            const inputs = els.settingsGrid.querySelectorAll('[data-cfg-key]');
+            const updated = { ...configData };
+            inputs.forEach(el => {
+                const key = el.getAttribute('data-cfg-key');
+                let val = el.value;
+                // 类型转换
+                if (typeof configData[key] === 'number') {
+                    val = Number(val);
+                } else if (typeof configData[key] === 'boolean') {
+                    val = (val === 'true');
+                }
+                updated[key] = val;
+            });
+
+            const res = await fetch('/api/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            const result = await res.json();
+
+            if (!res.ok || result.status === 'error') {
+                throw new Error(result.error_message || '保存失败');
+            }
+            configData = updated;
+            showSaveStatus('success', '已保存');
+        } catch (e) {
+            showSaveStatus('error', `失败: ${e.message}`);
+        }
+    }
+
+    function showSaveStatus(type, msg) {
+        els.settingsSaveStatus.textContent = msg;
+        els.settingsSaveStatus.className = `settings-save-status visible ${type}`;
+        setTimeout(() => {
+            els.settingsSaveStatus.classList.remove('visible');
+        }, 2400);
+    }
+
+    function toggleSettings() {
+        const expanded = els.settingsBody.classList.toggle('expanded');
+        els.settingsToggle.classList.toggle('expanded', expanded);
+    }
+
+    /* ============================================================
+       生成决策报告
+       ============================================================ */
+    async function generateReport() {
+        const stockCode = els.stockSelect.value;
+        if (!stockCode) {
+            showAlert('warn', '请先选择股票标的');
+            return;
+        }
+
+        const payload = {
+            stock_code: stockCode,
+            pred_len: parseInt(els.predLen.value, 10) || 120,
+            temperature: parseFloat(els.temperature.value) || 1.2,
+            top_p: parseFloat(els.topP.value) || 0.95,
+        };
+
+        // UI 切换到加载状态
+        setLoading(true);
+        clearAlert();
+        els.reportSection.classList.remove('active');
+        els.emptyState.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/decision-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const report = await res.json();
+
+            if (!res.ok) {
+                throw new Error(report.error_message || `服务端错误 (${res.status})`);
+            }
+
+            if (report.status === 'error') {
+                throw new Error(report.error_message || '生成报告失败');
+            }
+
+            // 降级提示
+            if (report.status === 'degraded') {
+                showAlert('warn', `降级运行: ${report.error_message || '部分功能不可用'}`);
+            }
+
+            renderReport(report);
+            els.reportSection.classList.add('active');
+        } catch (e) {
+            showAlert('error', `生成报告失败: ${e.message}`);
+            els.emptyState.style.display = 'flex';
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function setLoading(loading) {
+        if (loading) {
+            els.loadingOverlay.classList.add('active');
+            els.generateBtn.disabled = true;
+            els.generateBtn.querySelector('span:last-child').textContent = '生成中...';
+        } else {
+            els.loadingOverlay.classList.remove('active');
+            els.generateBtn.disabled = false;
+            els.generateBtn.querySelector('span:last-child').textContent = '生成报告';
+        }
+    }
+
+    /* ============================================================
+       渲染报告
+       ============================================================ */
+    function renderReport(report) {
+        const sig = report.signal || {};
+        const signalStr = (sig.signal || 'HOLD').toUpperCase();
+        const map = SIGNAL_MAP[signalStr] || SIGNAL_MAP.HOLD;
+
+        // ---- 信号卡片 ----
+        els.signalCard.className = `signal-card signal-${map.cls}`;
+        els.signalZh.textContent = map.zh;
+        els.signalEn.textContent = signalStr;
+        els.signalReason.textContent = sig.signal_reason || '（无决策理由说明）';
+        els.signalStockLabel.innerHTML =
+            `<span class="stock-code">${escapeHtml(report.stock_code || '--')}</span>` +
+            ` · ${escapeHtml(report.stock_name || '--')}`;
+
+        // ---- 趋势分析 ----
+        const trend = sig.trend || {};
+        renderTrend(trend, map);
+
+        // ---- 风险评估 ----
+        const risk = sig.risk || {};
+        renderRisk(risk);
+
+        // ---- 评分详情表格 ----
+        renderScoreDetail(sig.score_detail || {}, trend, risk);
+
+        // ---- 预测图表 ----
+        renderChart(report.prediction, report.stock_code, report.stock_name);
+
+        // ---- 底部信息 ----
+        els.footerStock.textContent = `${report.stock_code || '--'} · ${report.stock_name || '--'}`;
+        els.footerSignal.textContent = `${map.zh} (${signalStr})`;
+        els.footerGeneratedAt.textContent = formatTime(report.generated_at);
+        els.footerElapsed.textContent = report.elapsed_seconds != null
+            ? `${Number(report.elapsed_seconds).toFixed(2)}s` : '--';
+    }
+
+    function renderTrend(trend, map) {
+        // 方向箭头
+        const dirStr = trend.direction || map.arrow;
+        const arrowChar = deriveArrow(dirStr, map);
+        els.trendArrow.textContent = arrowChar;
+        els.trendArrow.className = 'trend-arrow ' + map.dirCls;
+
+        els.trendDirectionValue.textContent = map.dirText;
+        els.trendDirectionValue.className = 'trend-direction-value ' + map.dirCls;
+
+        // 置信度
+        const conf = (trend.confidence || '中').toString();
+        els.trendConfidence.textContent = `${conf}置信`;
+        els.trendConfidence.className = 'confidence-badge ' +
+            (conf.includes('高') ? 'high' : conf.includes('低') ? 'low' : 'medium');
+
+        // 趋势强度
+        const strength = parseFloat(trend.strength) || 0;
+        els.trendStrengthValue.textContent = strength.toFixed(2);
+        els.trendStrengthFill.style.width = `${Math.min(100, Math.max(0, strength * 100))}%`;
+
+        // 上涨概率
+        const upProb = parseFloat(trend.up_probability);
+        if (!isNaN(upProb)) {
+            els.trendUpProb.textContent = upProb.toFixed(2);
+            els.trendUpProb.className = 'trend-metric-value ' + (upProb >= 0.5 ? 'up' : 'down');
+        } else {
+            els.trendUpProb.textContent = '--';
+        }
+
+        // 一致性
+        const consistency = trend.consistency || sig?.score_detail?.consistency || '--';
+        // 从 score_detail 取一致性兜底
+        els.trendConsistency.textContent = consistency;
+    }
+
+    function deriveArrow(dirStr, map) {
+        if (dirStr.includes('↑')) return '↑';
+        if (dirStr.includes('↓')) return '↓';
+        if (dirStr.includes('→') || dirStr.includes('—')) return '→';
+        return map.arrow;
+    }
+
+    function renderRisk(risk) {
+        // VaR 95%
+        const varVal = parseFloat(risk.var_95);
+        if (!isNaN(varVal)) {
+            const pct = (varVal * 100).toFixed(2);
+            els.riskVar.textContent = `${pct}%`;
+            els.riskVar.className = 'risk-item-value ' + (varVal < 0 ? 'negative' : 'positive');
+        } else {
+            els.riskVar.textContent = '--';
+        }
+
+        // 波动率
+        const vol = (risk.volatility || '--').toString();
+        els.riskVolatility.textContent = vol;
+        els.riskVolatility.className = 'risk-item-value ' + (RISK_LEVEL_MAP[vol] || '');
+
+        // 反转风险
+        const rev = (risk.reversal_risk || '--').toString();
+        els.riskReversal.textContent = rev;
+        els.riskReversal.className = 'risk-item-value ' + (RISK_LEVEL_MAP[rev] || '');
+    }
+
+    function renderScoreDetail(detail, trend, risk) {
+        // 评分详情：合并 score_detail 各字段，附说明
+        const rows = [];
+        const descriptions = {
+            trend_strength: '趋势方向强度量化值（0-1）',
+            up_probability: '预测区间内上涨概率',
+            var_95: '95% 置信区间最大日跌幅（负值代表损失）',
+            volatility: '预测区间价格波动级别',
+            reversal_risk: '趋势反转可能性级别',
+            consistency: '多维度指标一致性评估',
+        };
+
+        Object.entries(detail).forEach(([key, val]) => {
+            let displayVal = val;
+            let valCls = '';
+            if (key === 'var_95') {
+                const n = parseFloat(val);
+                if (!isNaN(n)) {
+                    displayVal = `${(n * 100).toFixed(2)}%`;
+                    valCls = n < 0 ? 'down' : 'up';
+                }
+            } else if (key === 'trend_strength' || key === 'up_probability') {
+                const n = parseFloat(val);
+                if (!isNaN(n)) {
+                    displayVal = n.toFixed(2);
+                    if (key === 'up_probability') valCls = n >= 0.5 ? 'up' : 'down';
+                }
+            } else if (typeof val === 'string' && RISK_LEVEL_MAP[val]) {
+                // 低/中/高的级别值着色
+                if (val === '低') valCls = 'up';
+                else if (val === '高') valCls = 'down';
+                else valCls = 'warn';
+            }
+            rows.push(`<tr>
+                <td class="metric-name">${escapeHtml(key)}</td>
+                <td class="metric-value ${valCls}">${escapeHtml(String(displayVal))}</td>
+                <td>${escapeHtml(descriptions[key] || '')}</td>
+            </tr>`);
+        });
+
+        // 兜底：如果 score_detail 为空，从 trend / risk 补
+        if (rows.length === 0) {
+            if (trend && trend.strength != null) {
+                rows.push(magicRow('trend_strength', trend.strength, descriptions.trend_strength));
+            }
+            if (trend && trend.up_probability != null) {
+                rows.push(magicRow('up_probability', trend.up_probability, descriptions.up_probability));
+            }
+            if (trend && trend.consistency) {
+                rows.push(magicRow('consistency', trend.consistency, descriptions.consistency));
+            }
+            if (risk && risk.var_95 != null) {
+                rows.push(magicRow('var_95', risk.var_95, descriptions.var_95));
+            }
+            if (risk && risk.volatility) {
+                rows.push(magicRow('volatility', risk.volatility, descriptions.volatility));
+            }
+            if (risk && risk.reversal_risk) {
+                rows.push(magicRow('reversal_risk', risk.reversal_risk, descriptions.reversal_risk));
+            }
+        }
+
+        els.scoreTableBody.innerHTML = rows.length
+            ? rows.join('')
+            : '<tr><td colspan="3" style="text-align:center;color:var(--text-tertiary);">暂无评分数据</td></tr>';
+    }
+
+    function magicRow(name, val, desc) {
+        let display = val, cls = '';
+        if (name === 'var_95') {
+            const n = parseFloat(val);
+            if (!isNaN(n)) { display = `${(n * 100).toFixed(2)}%`; cls = n < 0 ? 'down' : 'up'; }
+        } else if (name === 'trend_strength' || name === 'up_probability') {
+            const n = parseFloat(val);
+            if (!isNaN(n)) { display = n.toFixed(2); if (name === 'up_probability') cls = n >= 0.5 ? 'up' : 'down'; }
+        }
+        if (!desc) {
+            const descriptions = {
+                trend_strength: '趋势方向强度量化值（0-1）',
+                up_probability: '预测区间内上涨概率',
+                var_95: '95% 置信区间最大日跌幅（负值代表损失）',
+                volatility: '预测区间价格波动级别',
+                reversal_risk: '趋势反转可能性级别',
+                consistency: '多维度指标一致性评估',
+            };
+            desc = descriptions[name] || '';
+        }
+        return `<tr>
+            <td class="metric-name">${escapeHtml(name)}</td>
+            <td class="metric-value ${cls}">${escapeHtml(String(display))}</td>
+            <td>${escapeHtml(desc)}</td>
+        </tr>`;
+    }
+
+    /* ============================================================
+       渲染预测图表（Chart.js K线 / 折线）
+       ============================================================ */
+    function renderChart(prediction, stockCode, stockName) {
+        if (predictionChart) {
+            predictionChart.destroy();
+            predictionChart = null;
+        }
+
+        const predDf = prediction && prediction.pred_df;
+
+        // pred_df 可能是 {columns: [...], data: [[...], ...]} 结构 或 {timestamps: [...], open: [...], ...}
+        let rows = [];
+        if (predDf && Array.isArray(predDf.columns) && Array.isArray(predDf.data)) {
+            // 表格格式
+            const cols = predDf.columns;
+            rows = predDf.data.map(r => {
+                const obj = {};
+                cols.forEach((c, i) => { obj[c] = r[i]; });
+                return obj;
+            });
+        } else if (predDf && Array.isArray(predDf.columns)) {
+            // 列式格式
+            const cols = predDf.columns;
+            const len = cols.reduce((m, c) => Math.max(m, Array.isArray(predDf[c]) ? predDf[c].length : 0), 0);
+            for (let i = 0; i < len; i++) {
+                const obj = {};
+                cols.forEach(c => { obj[c] = Array.isArray(predDf[c]) ? predDf[c][i] : null; });
+                rows.push(obj);
+            }
+        } else if (Array.isArray(predDf)) {
+            rows = predDf;
+        }
+
+        if (!rows.length) {
+            els.chartTag.textContent = '无数据';
+            return;
+        }
+
+        const tsKey = rows[0].hasOwnProperty('timestamp') ? 'timestamp'
+            : rows[0].hasOwnProperty('timestamps') ? 'timestamps' : null;
+
+        const labels = rows.map((r, i) => tsKey ? r[tsKey] : `T+${i + 1}`);
+        const closes = rows.map(r => r.close != null ? Number(r.close) : null);
+        const opens = rows.map(r => r.open != null ? Number(r.open) : null);
+        const highs = rows.map(r => r.high != null ? Number(r.high) : null);
+        const lows = rows.map(r => r.low != null ? Number(r.low) : null);
+
+        const ctx = els.chartArea.getContext('2d');
+
+        // K线用 custom 渲染较复杂，这里用 close 折线 + 加权区间区域
+        const upDown = rows.map((r, i) => {
+            if (r.close == null || r.open == null) return 0;
+            return Number(r.close) >= Number(r.open) ? 1 : 0;
+        });
+
+        // 构建高低区间填充
+        const highLowDatasets = highs.map((h, i) => h != null && lows[i] != null).every(Boolean)
+            ? [{
+                label: '波动区间',
+                data: highs.map((h, i) => ({ x: labels[i], y: h })),
+                borderColor: 'transparent',
+                backgroundColor: 'rgba(0, 212, 170, 0.08)',
+                pointRadius: 0,
+                fill: '+1',
+                tension: 0.25,
+                order: 2,
+            }, {
+                label: '波动区间(下)',
+                data: lows.map((l, i) => ({ x: labels[i], y: l })),
+                borderColor: 'transparent',
+                backgroundColor: 'transparent',
+                pointRadius: 0,
+                fill: false,
+                tension: 0.25,
+                order: 2,
+            }]
+            : [];
+
+        predictionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    ...highLowDatasets,
+                    {
+                        label: '收盘价',
+                        data: closes,
+                        borderColor: '#00d4aa',
+                        backgroundColor: 'rgba(0, 212, 170, 0.12)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        pointHoverBackgroundColor: '#00d4aa',
+                        pointHoverBorderColor: '#0a0e17',
+                        pointHoverBorderWidth: 2,
+                        fill: true,
+                        tension: 0.25,
+                        order: 1,
+                        segment: {
+                            borderColor: (ctx) => {
+                                const i = ctx.p0DataIndex;
+                                return upDown[i] === 1 ? '#00c853' : '#ff1744';
+                            },
+                        },
+                    },
+                    {
+                        label: '开盘价',
+                        data: opens,
+                        borderColor: 'rgba(139, 152, 168, 0.5)',
+                        borderWidth: 1,
+                        borderDash: [4, 4],
+                        pointRadius: 0,
+                        tension: 0.25,
+                        fill: false,
+                        order: 3,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                animation: { duration: 800, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#8b98a8',
+                            font: { family: "'JetBrains Mono', monospace", size: 11 },
+                            usePointStyle: true,
+                            boxWidth: 8,
+                            filter: (item) => item.text !== '波动区间(下)',
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: '#0d121b',
+                        borderColor: '#2d3647',
+                        borderWidth: 1,
+                        titleColor: '#e6edf3',
+                        bodyColor: '#8b98a8',
+                        titleFont: { family: "'JetBrains Mono', monospace", size: 12 },
+                        bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+                        padding: 12,
+                        cornerRadius: 6,
+                        displayColors: true,
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: '#5a6675',
+                            font: { family: "'JetBrains Mono', monospace", size: 10 },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12,
+                        },
+                        grid: { color: 'rgba(35, 43, 57, 0.5)', drawTicks: false },
+                        border: { color: '#232b39' },
+                    },
+                    y: {
+                        ticks: {
+                            color: '#5a6675',
+                            font: { family: "'JetBrains Mono', monospace", size: 10 },
+                            callback: (v) => v.toFixed(2),
+                        },
+                        grid: { color: 'rgba(35, 43, 57, 0.5)', drawTicks: false },
+                        border: { color: '#232b39' },
+                    },
+                },
+            },
+        });
+
+        els.chartTag.textContent = `${rows.length} 点预测`;
+    }
+
+    /* ============================================================
+       提示框
+       ============================================================ */
+    function showAlert(type, msg) {
+        const iconMap = { error: '✕', warn: '⚠' };
+        const icon = iconMap[type] || 'ℹ';
+        const cls = type === 'error' ? 'error' : 'warn';
+        els.alertArea.innerHTML = `<div class="alert-box ${cls}">
+            <span class="alert-icon">${icon}</span>
+            <div>${escapeHtml(msg)}</div>
+        </div>`;
+    }
+
+    function clearAlert() {
+        els.alertArea.innerHTML = '';
+    }
+
+    /* ============================================================
+       工具函数
+       ============================================================ */
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatTime(iso) {
+        if (!iso) return '--';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return iso;
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+                   `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        } catch (e) {
+            return iso;
+        }
+    }
+
+    // ---- 启动 ----
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>
+</body>
+</html>
