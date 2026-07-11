@@ -156,6 +156,15 @@ class DataFetcher:
         for col in OPTIONAL_COLUMNS:
             if col not in df.columns:
                 df[col] = 0.0
+            else:
+                df[col] = df[col].fillna(0.0)
+        # 清洗所有列为 NaN 的行
+        all_cols = [c for c in REQUIRED_COLUMNS + OPTIONAL_COLUMNS if c in df.columns]
+        df = df.dropna(subset=REQUIRED_COLUMNS)
+        # 可选列残留 NaN 填 0
+        for col in OPTIONAL_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].fillna(0.0)
         return df
 
     def _validate(self, df: pd.DataFrame, stock_code: str) -> None:
@@ -165,9 +174,11 @@ class DataFetcher:
             raise DataValidationError(
                 f"{stock_code} 缺少必需列: {missing}"
             )
-        null_count = df[REQUIRED_COLUMNS].isnull().any(axis=1).sum()
+        # 检查所有列是否有 NaN
+        all_cols = [c for c in df.columns if c in REQUIRED_COLUMNS + OPTIONAL_COLUMNS]
+        null_count = df[all_cols].isnull().any(axis=1).sum()
         if null_count > 0:
-            df = df.dropna(subset=REQUIRED_COLUMNS)
+            df.dropna(subset=all_cols, inplace=True)
         if len(df) < 50:
             raise DataValidationError(
                 f"{stock_code} 有效数据行数不足（{len(df)} < 50）"

@@ -69,6 +69,14 @@ class DecisionEngine:
             df = self._fetcher.fetch_daily(stock_code)
             stock_name = self._get_stock_name(stock_code)
 
+            # 最终兜底：确保无 NaN
+            required = ["open", "high", "low", "close"]
+            optional = ["volume", "amount"]
+            for col in required + optional:
+                if col in df.columns:
+                    df[col] = df[col].fillna(0.0)
+            df = df.dropna(subset=required)
+
             # ── 2. 准备模型输入 ──────────────────
             pred_len = params.get("pred_len", self._pred_cfg.default_pred_len)
             max_context = params.get("max_context", get_config().model.max_context)
