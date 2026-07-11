@@ -1,0 +1,39 @@
+data:
+  backup_source: baostock
+  cache_dir: data/cache
+  cache_ttl_hours: 24
+  primary_source: akshare
+  retry_backoff_seconds:
+  - 2
+  - 4
+  - 8
+  retry_max: 3
+logging:
+  backup_count: 5
+  file: logs/kronos.log
+  level: INFO
+  max_size_mb: 50
+model:
+  device: cuda
+  idle_timeout_minutes: 10
+  max_context: 512
+  predictor: NeoQuasar/Kronos-small
+  tokenizer: NeoQuasar/Kronos-Tokenizer-base
+prediction:
+  default_pred_len: 120
+  default_sample_count: 50
+  default_temperature: 1.0
+  default_top_p: 0.9
+  fallback_sample_count: 10
+  timeout_seconds: 60
+signal:
+  consistency_std_threshold: 0.15
+  reversal_rsi_overbought: 70
+  reversal_rsi_oversold: 30
+  trend_strength_buy_threshold: 0.7
+  trend_strength_sell_threshold: 0.4
+  var_risk_high_threshold: 0.05
+webui:
+  host: 0.0.0.0
+  port: 7070
+  stock_pool: 沪深300
