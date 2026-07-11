@@ -1,0 +1,1 @@
+# Root conftest — makes top-level packages (model/, decision/) importable from tests/.
