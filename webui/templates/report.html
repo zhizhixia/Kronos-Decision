@@ -150,7 +150,7 @@
             <div class="data-panel">
                 <div class="panel-header">
                     <h2><span class="header-icon">⚠</span>风险评估</h2>
-                    <span class="header-tag">RISK</span>
+                    <span class="header-tag">风险</span>
                 </div>
                 <div class="risk-panel">
                     <div class="risk-item">
@@ -182,7 +182,7 @@
         <div class="data-panel" style="margin-bottom:24px;">
             <div class="panel-header">
                 <h2><span class="header-icon">▦</span>评分详情</h2>
-                <span class="header-tag">SCORE DETAIL</span>
+                <span class="header-tag">评分</span>
             </div>
             <div class="data-table-wrap">
                 <table class="data-table" id="score-table">
@@ -204,7 +204,7 @@
         <div class="chart-container">
             <div class="panel-header">
                 <h2><span class="header-icon">📈</span>预测走势</h2>
-                <span class="header-tag" id="chart-tag">PREDICTION</span>
+                <span class="header-tag" id="chart-tag">预测</span>
             </div>
             <div class="chart-area">
                 <canvas id="prediction-chart"></canvas>
@@ -539,7 +539,7 @@
         // ---- 信号卡片 ----
         els.signalCard.className = `signal-card signal-${map.cls}`;
         els.signalZh.textContent = map.zh;
-        els.signalEn.textContent = signalStr;
+        els.signalEn.textContent = map.zh;
         els.signalReason.textContent = sig.signal_reason || '（无决策理由说明）';
         els.signalStockLabel.innerHTML =
             `<span class="stock-code">${escapeHtml(report.stock_code || '--')}</span>` +
@@ -643,6 +643,14 @@
             reversal_risk: '趋势反转可能性级别',
             consistency: '多维度指标一致性评估',
         };
+        const zhLabels = {
+            trend_strength: '趋势强度',
+            up_probability: '上涨概率',
+            var_95: '风险价值(VaR)',
+            volatility: '波动率',
+            reversal_risk: '反转风险',
+            consistency: '一致性',
+        };
 
         Object.entries(detail).forEach(([key, val]) => {
             let displayVal = val;
@@ -666,7 +674,7 @@
                 else valCls = 'warn';
             }
             rows.push(`<tr>
-                <td class="metric-name">${escapeHtml(key)}</td>
+                <td class="metric-name">${escapeHtml(zhLabels[key] || key)}</td>
                 <td class="metric-value ${valCls}">${escapeHtml(String(displayVal))}</td>
                 <td>${escapeHtml(descriptions[key] || '')}</td>
             </tr>`);
@@ -719,8 +727,16 @@
             };
             desc = descriptions[name] || '';
         }
+        const zhLabels = {
+            trend_strength: '趋势强度',
+            up_probability: '上涨概率',
+            var_95: '风险价值(VaR)',
+            volatility: '波动率',
+            reversal_risk: '反转风险',
+            consistency: '一致性',
+        };
         return `<tr>
-            <td class="metric-name">${escapeHtml(name)}</td>
+            <td class="metric-name">${escapeHtml(zhLabels[name] || name)}</td>
             <td class="metric-value ${cls}">${escapeHtml(String(display))}</td>
             <td>${escapeHtml(desc)}</td>
         </tr>`;
