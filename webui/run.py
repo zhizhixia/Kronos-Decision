@@ -6,8 +6,6 @@ Kronos Web UI startup script
 import os
 import sys
 import subprocess
-import webbrowser
-import time
 
 def check_dependencies():
     """Check if dependencies are installed"""
@@ -73,10 +71,6 @@ def main():
         print("✅ Web server started successfully!")
         print(f"🌐 Access URL: http://localhost:7070")
         print("💡 Tip: Press Ctrl+C to stop server")
-        
-        # Auto-open browser
-        time.sleep(2)
-        webbrowser.open('http://localhost:7070')
         
         # Start Flask application
         app.run(debug=True, host='0.0.0.0', port=7070)

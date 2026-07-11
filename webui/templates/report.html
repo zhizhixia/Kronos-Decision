@@ -38,9 +38,10 @@
         <div class="search-bar">
             <label>股票标的</label>
             <div class="select-wrap">
-                <select id="stock-select" aria-label="选择股票">
+                <input type="text" id="stock-select" list="stock-datalist" placeholder="输入股票代码搜索..." autocomplete="off" aria-label="选择股票">
+                <datalist id="stock-datalist">
                     <option value="">加载中...</option>
-                </select>
+                </datalist>
             </div>
         </div>
 
@@ -368,12 +369,16 @@
                 throw new Error(data.error_message || '获取股票列表失败');
             }
             const stocks = data.stocks || [];
-            els.stockSelect.innerHTML = '<option value="">请选择股票...</option>' +
-                stocks.map(s =>
-                    `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} · ${escapeHtml(s.name)}</option>`
-                ).join('');
+            // input 占位文本更新
+            els.stockSelect.placeholder = `输入搜索（共 ${stocks.length} 只股票）...`;
+            // datalist 填充选项
+            const datalist = document.getElementById('stock-datalist');
+            datalist.innerHTML = stocks.map(s =>
+                `<option value="${escapeHtml(s.code)}">${escapeHtml(s.code)} · ${escapeHtml(s.name)}</option>`
+            ).join('');
         } catch (e) {
-            els.stockSelect.innerHTML = '<option value="">股票列表加载失败</option>';
+            const datalist = document.getElementById('stock-datalist');
+            if (datalist) datalist.innerHTML = '<option value="">股票列表加载失败</option>';
             showAlert('error', `加载股票列表失败: ${e.message}`);
         }
     }
@@ -471,6 +476,13 @@
             showAlert('warn', '请先选择股票标的');
             return;
         }
+        // 检查输入是否匹配 datalist 中的选项
+        const datalist = document.getElementById('stock-datalist');
+        const options = Array.from(datalist.options).map(o => o.value);
+        if (!options.includes(stockCode)) {
+            showAlert('warn', '请从下拉列表中选择有效的股票代码');
+            return;
+        }
 
         const payload = {
             stock_code: stockCode,
@@ -547,7 +559,7 @@
 
         // ---- 趋势分析 ----
         const trend = sig.trend || {};
-        renderTrend(trend, map);
+        renderTrend(trend, map, sig);
 
         // ---- 风险评估 ----
         const risk = sig.risk || {};
@@ -567,7 +579,7 @@
             ? `${Number(report.elapsed_seconds).toFixed(2)}s` : '--';
     }
 
-    function renderTrend(trend, map) {
+    function renderTrend(trend, map, sig) {
         // 方向箭头
         const dirStr = trend.direction || map.arrow;
         const arrowChar = deriveArrow(dirStr, map);

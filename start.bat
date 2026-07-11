@@ -41,6 +41,7 @@ echo   Press Ctrl+C to stop
 echo ================================================
 echo.
 
+start http://localhost:7070
 cd /d "%PROJECT%"
 %PYTHON% webui/run.py
 
