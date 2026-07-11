@@ -83,18 +83,22 @@ class DecisionEngine:
             temperature = params.get("temperature", self._pred_cfg.default_temperature)
             top_p = params.get("top_p", self._pred_cfg.default_top_p)
 
-            x_df = df.iloc[-max_context:].set_index("date")
-            x_timestamp = df.iloc[-max_context:]["date"]
+            # 取最近 max_context 行
+            recent = df.iloc[-max_context:].copy()
+            # x_df 保留 date 列（Kronos 需要 date 不在 index 中）
+            x_df = recent[["date"] + required + optional].copy()
+            x_df["date"] = pd.to_datetime(x_df["date"])
+            x_timestamp = pd.Series(x_df["date"].values)  # 确保是 Series
 
-            # 生成未来时间戳
+            # 生成未来时间戳（用 pd.Series 而非 DatetimeIndex）
             y_timestamp = self._generate_future_timestamps(
-                df["date"].iloc[-1], pred_len
+                pd.Timestamp(df["date"].iloc[-1]), pred_len
             )
 
             # ── 3. 模型预测 ──────────────────────
-            tokenizer, predictor = self._model_manager.get_predictor()
+            tokenizer, model = self._model_manager.get_predictor()
 
-            pred_df = predictor.predict(
+            pred_df = model.predict(
                 df=x_df,
                 x_timestamp=x_timestamp,
                 y_timestamp=y_timestamp,
@@ -108,8 +112,13 @@ class DecisionEngine:
             current_price = float(df["close"].iloc[-1])
             historical_closes = df["close"].values
 
+            # 从预测结果提取信息供分析器使用
+            # pred_df: 行=预测步, 列=OHLCVAMT
+            # 模拟多条路径：用预测值与微小噪声生成 20 条路径
+            paths = self._simulate_paths(pred_df, n_paths=20)
+
             signal = self._analyzer.analyze(
-                prediction_paths=self._extract_paths(pred_df),
+                prediction_paths=paths,
                 current_price=current_price,
                 historical_closes=historical_closes,
             )
@@ -118,7 +127,11 @@ class DecisionEngine:
             return DecisionReport(
                 status="ok",
                 signal=signal,
-                prediction={"pred_df": pred_df.to_dict()},
+                prediction={
+                    "pred_df": pred_df.to_dict(orient="records"),
+                    "pred_len": pred_len,
+                    "current_price": current_price,
+                },
                 stock_code=stock_code,
                 stock_name=stock_name,
                 elapsed_seconds=round(elapsed, 2),
@@ -146,21 +159,48 @@ class DecisionEngine:
     @staticmethod
     def _generate_future_timestamps(
         last_date: pd.Timestamp, pred_len: int
-    ) -> pd.DatetimeIndex:
-        """生成未来交易日时间戳（跳过周末）。"""
+    ) -> pd.Series:
+        """生成未来交易日时间戳（跳过周末），返回 pd.Series 避免 .dt 问题。"""
         dates = []
         current = last_date + pd.Timedelta(days=1)
         while len(dates) < pred_len:
             if current.dayofweek < 5:  # 周一到周五
                 dates.append(current)
             current += pd.Timedelta(days=1)
-        return pd.DatetimeIndex(dates)
+        return pd.Series(dates, name="date")
 
     @staticmethod
-    def _extract_paths(pred_df: pd.DataFrame) -> np.ndarray:
-        """从预测 DataFrame 提取路径数组。"""
-        # Kronos predictor 返回格式需适配，此处做通用转换
-        return pred_df.values.reshape(1, -1, 5)
+    def _simulate_paths(
+        pred_df: pd.DataFrame, n_paths: int = 20
+    ) -> np.ndarray:
+        """从单次预测结果模拟多条采样路径。
+
+        Kronos 的 predict() 返回一条平均路径。
+        分析器需要多条路径来计算置信度和 VaR，
+        因此用预测值 + 可控噪声生成模拟路径。
+
+        Args:
+            pred_df: Kronos 预测输出（pred_len 行 × OHLCVAMT 列）
+            n_paths: 模拟路径数
+
+        Returns:
+            (n_paths, pred_len, 5) 的 numpy 数组（OHLCV）
+        """
+        price_cols = ["open", "high", "low", "close", "volume"]
+        base = pred_df[price_cols].values.astype(np.float64)  # (pred_len, 5)
+        std = np.std(base, axis=0) * 0.05  # 5% 噪声
+
+        paths = np.zeros((n_paths, base.shape[0], 5))
+        for i in range(n_paths):
+            noise = np.random.randn(*base.shape) * std
+            paths[i] = base + noise
+
+        # 确保 high >= low 和 close 合理
+        for i in range(n_paths):
+            paths[i, :, 1] = np.maximum(paths[i, :, 1], paths[i, :, 2])  # high >= low
+            paths[i, :, 2] = np.minimum(paths[i, :, 1], paths[i, :, 2])
+
+        return paths
 
     @staticmethod
     def _get_stock_name(stock_code: str) -> str:
