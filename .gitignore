@@ -74,3 +74,12 @@ venv.bak/
 temp/
 tmp/
 .python-version
+
+# IDE internal files
+.omo/
+
+# Plan documents (local only)
+.hermes/
+
+# Cache data (keep directory structure)
+data/cache/*.csv
