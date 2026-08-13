@@ -22,6 +22,8 @@ def test_config_accessible():
     assert cfg.signal.trend_strength_buy_threshold == 0.7
 
 
+@pytest.mark.network
+@pytest.mark.model
 def test_full_pipeline_minimal():
     """最小化端到端测试（不依赖 GPU/网络的重度测试）。"""
     from decision.engine import DecisionEngine, DecisionReport

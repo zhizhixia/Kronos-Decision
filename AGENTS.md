@@ -80,6 +80,7 @@ Kronos-Decision 是基于 [Kronos](https://github.com/shiyu-coder/Kronos) (AAAI 
 - JavaScript 变量作用域是高频 Bug 来源——跨函数依赖必须**显式传参**
 - Canvas 渲染必须在容器可见后进行（先 `classList.add('active')` 再 `render`）
 - Windows `.bat` 脚本避免 Unicode 字符和 emoji（中文可用，特殊符号用纯 ASCII）
+- Windows `.bat` 括号块内必须 `setlocal enabledelayedexpansion` 并用 `!VAR!` 读取变量（`%VAR%` 在解析期展开、括号内读到旧值）；含空格路径的变量调用必须加引号 `"!VAR!"`；脚本自身目录用 `%~dp0` 推导，不硬编码路径
 
 ---
 

@@ -12,15 +12,22 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-import comet_ml
+try:
+    import comet_ml
+except ImportError:
+    comet_ml = None
 
 # Ensure project root is in path
-sys.path.append("../")
-from config import Config
-from dataset import QlibDataset
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from finetune.config import Config
+from finetune.dataset import QlibDataset
 from model.kronos import KronosTokenizer
 # Import shared utilities
-from utils.training_utils import (
+from finetune.utils.training_utils import (
     setup_ddp,
     cleanup_ddp,
     set_seed,
@@ -235,6 +242,8 @@ def main(config: dict):
             'world_size': world_size,
         }
         if config['use_comet']:
+            if comet_ml is None:
+                raise RuntimeError("启用 Comet 时必须先安装可选依赖 comet_ml。")
             comet_logger = comet_ml.Experiment(
                 api_key=config['comet_config']['api_key'],
                 project_name=config['comet_config']['project_name'],

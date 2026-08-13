@@ -1,0 +1,66 @@
+{% extends "base_v2.html" %}
+
+{% block title %}Kronos 系统诊断{% endblock %}
+
+{% block page_header %}
+    <h1>系统诊断</h1>
+    <div class="subtitle">System Diagnostics</div>
+{% endblock %}
+
+{% block content %}
+    <section class="wb-card settings-section" aria-label="配置路径">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+            配置路径
+        </h3>
+        <div class="config-path-line">
+            <code id="config-path">decision/config.yaml</code>
+            <button type="button" class="wb-copy-btn wb-btn-sm" data-target="config-path" aria-label="复制配置路径">复制</button>
+        </div>
+        <p class="wb-note">此页为只读诊断中心。外部修改配置后需重启服务，且已有证据可能因哈希变化而失效。</p>
+    </section>
+
+    <section class="wb-card settings-section" aria-label="模型与运行环境">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-report"></use></svg>
+            模型与运行环境
+        </h3>
+        <dl class="wb-dl" id="model-dl"></dl>
+    </section>
+
+    <section class="wb-card settings-section" aria-label="预测参数">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-research"></use></svg>
+            预测参数
+        </h3>
+        <dl class="wb-dl" id="prediction-dl"></dl>
+    </section>
+
+    <section class="wb-card settings-section" aria-label="数据源与缓存">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"></use></svg>
+            数据源与缓存
+        </h3>
+        <dl class="wb-dl" id="data-dl"></dl>
+    </section>
+
+    <section class="wb-card settings-section" aria-label="WebUI">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+            WebUI
+        </h3>
+        <dl class="wb-dl" id="webui-dl"></dl>
+    </section>
+
+    <section class="wb-card settings-section" aria-label="最新证据">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+            最新证据
+        </h3>
+        <dl class="wb-dl" id="evidence-dl"></dl>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='settings.js') }}"></script>
+{% endblock %}

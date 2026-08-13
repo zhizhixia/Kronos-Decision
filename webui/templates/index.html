@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kronos Financial Prediction Web UI</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="/assets/plotly.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -634,6 +633,34 @@
     </div>
 
     <script>
+        // 最小本地 axios 兼容 shim：旧 index 页面仍使用 axios.get/post
+        const axios = {
+            async get(url, config) {
+                const response = await fetch(url, { method: "GET" });
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok) {
+                    const error = new Error(data.error && data.error.message ? data.error.message : "HTTP " + response.status);
+                    error.response = { data: data, status: response.status };
+                    throw error;
+                }
+                return { data: data, status: response.status };
+            },
+            async post(url, body, config) {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json().catch(function () { return {}; });
+                if (!response.ok) {
+                    const error = new Error(data.error && data.error.message ? data.error.message : "HTTP " + response.status);
+                    error.response = { data: data, status: response.status };
+                    throw error;
+                }
+                return { data: data, status: response.status };
+            }
+        };
+
         // Global variables
         let currentDataFile = null;
         let currentDataInfo = null;

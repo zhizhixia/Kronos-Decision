@@ -19,7 +19,7 @@ fi
 
 # Check dependencies
 echo "📦 Checking dependencies..."
-if ! python3 -c "import flask, flask_cors, pandas, numpy, plotly" &> /dev/null; then
+if ! python3 -c "import flask, pandas, numpy, plotly" &> /dev/null; then
     echo "⚠️  Missing dependencies, installing..."
     pip3 install -r requirements.txt
     if [ $? -ne 0 ]; then
@@ -33,7 +33,7 @@ fi
 
 # Start application
 echo "🌐 Starting Web server..."
-echo "Access URL: http://localhost:7070"
+echo "Access URL: http://127.0.0.1:7070"
 echo "Press Ctrl+C to stop server"
 echo ""
 

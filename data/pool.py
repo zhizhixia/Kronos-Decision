@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import os
+import tempfile
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,6 +14,7 @@ from decision.config import get_config
 
 _CACHE_PATH = Path(get_config().data.cache_dir) / "pool_hs300.csv"
 _REFRESH_INTERVAL_DAYS = 7
+_SOURCE_TIMEOUT_SECONDS = 60
 
 
 def get_hs300_pool() -> dict[str, str]:
@@ -32,7 +35,9 @@ def get_hs300_pool() -> dict[str, str]:
 
     # 尝试 akshare 获取
     try:
-        pool = _fetch_from_akshare()
+        from data.timeout import call_with_timeout
+
+        pool = call_with_timeout(_fetch_from_akshare, _SOURCE_TIMEOUT_SECONDS, name="fetch-hs300-pool")
         _save_cache(pool)
         return pool
     except Exception:
@@ -58,15 +63,25 @@ def _load_cache() -> dict[str, str] | None:
     if not _CACHE_PATH.exists():
         return None
     import pandas as pd
-    df = pd.read_csv(_CACHE_PATH, dtype=str)
+
+    try:
+        df = pd.read_csv(_CACHE_PATH, dtype=str)
+    except (OSError, UnicodeError, ValueError, pd.errors.ParserError, pd.errors.EmptyDataError):
+        return None
+    if not {"code", "name"}.issubset(df.columns):
+        return None
     return dict(zip(df["code"], df["name"]))
 
 
 def _save_cache(pool: dict[str, str]) -> None:
     import pandas as pd
+
     df = pd.DataFrame(pool.items(), columns=["code", "name"])
     _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(_CACHE_PATH, index=False)
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", delete=False, dir=_CACHE_PATH.parent, suffix=".tmp") as handle:
+        df.to_csv(handle, index=False)
+        temporary_path = Path(handle.name)
+    os.replace(temporary_path, _CACHE_PATH)
 
 
 def _is_fresh() -> bool:

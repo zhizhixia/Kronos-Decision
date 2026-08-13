@@ -1,0 +1,171 @@
+{% extends "base_v2.html" %}
+
+{% block title %}Kronos 本地组合{% endblock %}
+
+{% block page_header %}
+<h1>组合</h1>
+<span class="subtitle">Portfolio</span>
+{% endblock %}
+
+{% block page_meta %}
+<span class="wb-badge hidden" id="unsaved-badge">未保存</span>
+{% endblock %}
+
+{% block content %}
+<section class="portfolio-summary" aria-label="组合摘要">
+    <div class="summary-card">
+        <div class="summary-label">现金</div>
+        <div class="summary-value" id="summary-cash">--</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">持仓数量</div>
+        <div class="summary-value" id="summary-holdings">--</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">风险档案</div>
+        <div class="summary-value" id="summary-risk">--</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-label">组合版本</div>
+        <div class="summary-value" id="summary-version">--</div>
+    </div>
+</section>
+
+<div class="portfolio-grid">
+    <div class="portfolio-main">
+        <section class="wb-card portfolio-section" aria-label="组合资料">
+            <h3>
+                <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+                组合资料
+            </h3>
+            <div class="wb-form portfolio-form">
+                <div class="wb-field">
+                    <label for="profile-name">组合名称</label>
+                    <input type="text" id="profile-name" class="wb-input" maxlength="64" autocomplete="off">
+                </div>
+                <div class="wb-field risk-profile-field">
+                    <span class="field-label" id="risk-profile-label">风险档案</span>
+                    <div class="risk-segment" role="radiogroup" aria-labelledby="risk-profile-label">
+                        <label class="risk-segment-option">
+                            <input type="radio" name="risk-profile" value="conservative">
+                            <span class="risk-segment-label">稳健</span>
+                            <span class="risk-segment-desc">单股5% / 现金≥20%</span>
+                        </label>
+                        <label class="risk-segment-option">
+                            <input type="radio" name="risk-profile" value="balanced" checked>
+                            <span class="risk-segment-label">均衡</span>
+                            <span class="risk-segment-desc">单股8% / 现金≥10%</span>
+                        </label>
+                        <label class="risk-segment-option">
+                            <input type="radio" name="risk-profile" value="aggressive">
+                            <span class="risk-segment-label">进取</span>
+                            <span class="risk-segment-desc">单股12% / 现金≥5%</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="wb-field">
+                    <label for="cash">现金（元）</label>
+                    <input type="number" id="cash" class="wb-input" min="0" step="0.01" inputmode="decimal">
+                </div>
+            </div>
+        </section>
+
+        <section class="wb-card portfolio-section" aria-label="持仓">
+            <div class="section-header">
+                <h3>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"></use></svg>
+                    持仓
+                </h3>
+                <button type="button" id="add-holding-btn" class="wb-btn wb-btn-secondary wb-btn-sm">添加持仓</button>
+            </div>
+            <div class="portfolio-table-wrap">
+                <table class="wb-table portfolio-table" id="holdings-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">股票代码</th>
+                            <th scope="col">股数</th>
+                            <th scope="col">成本价（元）</th>
+                            <th scope="col" class="col-action">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="holdings-body">
+                        <tr class="portfolio-empty-row">
+                            <td colspan="4">暂无持仓，点击右上角添加。</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="wb-note">股票代码为六位数字；股数为非负整数；成本与现金不得为负。零股可保留，编辑时不强制整手。</p>
+        </section>
+
+        <section class="wb-card portfolio-section" aria-label="约束上限">
+            <h3>
+                <svg class="icon" aria-hidden="true"><use href="#icon-alert"></use></svg>
+                约束上限
+            </h3>
+            <div class="portfolio-constraints" id="constraints-grid">
+                <!-- 动态生成约束卡 -->
+            </div>
+            <p class="wb-note" id="sector-constraint-note">行业约束将在模拟调仓时验证，仅当行业映射存在时才生效。</p>
+        </section>
+
+        <section class="wb-card portfolio-section" aria-label="模拟调仓">
+            <div class="section-header">
+                <h3>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-research"></use></svg>
+                    模拟调仓
+                </h3>
+                <span class="wb-badge" id="gate-badge">检查评估门禁中…</span>
+            </div>
+            <p class="wb-note">仅在最新正式评估门禁通过后生成模拟目标权重与订单；输出仅供研究，不执行真实交易。</p>
+            <button type="button" id="rebalance-btn" class="wb-btn wb-btn-primary" disabled>生成模拟调仓</button>
+            <div id="rebalance-status" class="portfolio-status" role="status" aria-live="polite"></div>
+            <div id="rebalance-result" class="portfolio-result hidden">
+                <h4>目标权重</h4>
+                <div class="portfolio-table-wrap">
+                    <table class="wb-table portfolio-table" id="target-weights-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">股票代码</th>
+                                <th scope="col">目标权重</th>
+                            </tr>
+                        </thead>
+                        <tbody id="target-weights-body"></tbody>
+                    </table>
+                </div>
+                <h4>模拟订单</h4>
+                <div class="portfolio-table-wrap">
+                    <table class="wb-table portfolio-table" id="orders-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">股票</th>
+                                <th scope="col">方向</th>
+                                <th scope="col">股数</th>
+                                <th scope="col">参考价</th>
+                                <th scope="col">名义金额</th>
+                                <th scope="col">估算费用</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-body"></tbody>
+                    </table>
+                </div>
+                <div class="portfolio-summary-row" id="rebalance-summary"></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="portfolio-action-bar" id="portfolio-action-bar">
+    <div class="action-bar-inner">
+        <span class="wb-note hidden" id="action-bar-hint">有未保存的修改</span>
+        <div class="action-bar-buttons">
+            <button type="button" id="discard-btn" class="wb-btn wb-btn-secondary">放弃修改</button>
+            <button type="button" id="save-btn" class="wb-btn wb-btn-primary">保存修改</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='portfolio.js') }}"></script>
+{% endblock %}

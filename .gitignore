@@ -83,3 +83,26 @@ tmp/
 
 # Cache data (keep directory structure)
 data/cache/*.csv
+data/cache/*.meta.json
+data/user/
+artifacts/
+.pytest-basetemp/
+.pytest-tmp/
+tests/.tmp/
+scripts/.pip-tmp/
+vendor/
+qlib_data/
+
+# 本地开发/生成物（不忽略正式源码、tests/*.py、docs 或 scripts/*.py）
+.codegraph/
+.vendor_pydantic_bak/
+temp-x/
+examples/predictions/
+webui/prediction_results/
+*.orig
+
+# 测试沙箱临时目录（仅忽略仓库根级与显式命中，不影响源码/tests/docs/scripts）
+.pytest_cache/
+.test-tmp*/
+/mode-*
+/tmp*

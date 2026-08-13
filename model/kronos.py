@@ -3,11 +3,14 @@ import pandas as pd
 import torch
 from huggingface_hub import PyTorchModelHubMixin
 import sys
+import hashlib
+from typing import Any
 
 from tqdm import trange
 
 sys.path.append("../")
 from model.module import *
+from model.prediction import PredictionPaths, ensure_before_deadline, sampling_params_hash
 
 
 class KronosTokenizer(nn.Module, PyTorchModelHubMixin):
@@ -370,7 +373,7 @@ def top_k_top_p_filtering(
         return logits
 
 
-def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_logits=True):
+def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_logits=True, generator=None):
     logits = logits / temperature
     if top_k is not None or top_p is not None:
         if top_k > 0 or top_p < 1.0:
@@ -381,92 +384,161 @@ def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_l
     if not sample_logits:
         _, x = torch.topk(probs, k=1, dim=-1)
     else:
-        x = torch.multinomial(probs, num_samples=1)
+        x = torch.multinomial(probs, num_samples=1, generator=generator)
 
     return x
 
 
-def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context, pred_len, clip=5, T=1.0, top_k=0, top_p=0.99, sample_count=5, verbose=False):
-    with torch.no_grad():
-        x = torch.clip(x, -clip, clip)
+def _prepare_autoregressive_state(
+    tokenizer: Any, x: torch.Tensor, x_stamp: torch.Tensor,
+    y_stamp: torch.Tensor, max_context: int, pred_len: int,
+    sample_count: int,
+) -> tuple[Any, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+           torch.Tensor, int, int]:
+    device = x.device
+    x = x.unsqueeze(1).repeat(1, sample_count, 1, 1)
+    x = x.reshape(-1, x.size(2), x.size(3)).to(device)
+    x_stamp = x_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1)
+    x_stamp = x_stamp.reshape(-1, x_stamp.size(2), x_stamp.size(3)).to(device)
+    y_stamp = y_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1)
+    y_stamp = y_stamp.reshape(-1, y_stamp.size(2), y_stamp.size(3)).to(device)
 
-        device = x.device
-        x = x.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x.size(1), x.size(2)).to(device)
-        x_stamp = x_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, x_stamp.size(1), x_stamp.size(2)).to(device)
-        y_stamp = y_stamp.unsqueeze(1).repeat(1, sample_count, 1, 1).reshape(-1, y_stamp.size(1), y_stamp.size(2)).to(device)
+    x_token = tokenizer.encode(x, half=True)
+    initial_seq_len = x.size(1)
+    total_seq_len = initial_seq_len + pred_len
+    full_stamp = torch.cat([x_stamp, y_stamp], dim=1)
+    batch_size = x_token[0].size(0)
+    generated_pre = x_token[0].new_empty(batch_size, pred_len)
+    generated_post = x_token[1].new_empty(batch_size, pred_len)
+    pre_buffer = x_token[0].new_zeros(batch_size, max_context)
+    post_buffer = x_token[1].new_zeros(batch_size, max_context)
+    buffer_len = min(initial_seq_len, max_context)
+    if buffer_len > 0:
+        start_idx = max(0, initial_seq_len - max_context)
+        pre_buffer[:, :buffer_len] = x_token[0][:, start_idx:start_idx + buffer_len]
+        post_buffer[:, :buffer_len] = x_token[1][:, start_idx:start_idx + buffer_len]
+    return (
+        x_token, full_stamp, generated_pre, generated_post,
+        pre_buffer, post_buffer, initial_seq_len, total_seq_len,
+    )
 
-        x_token = tokenizer.encode(x, half=True)
-        
-        initial_seq_len = x.size(1)
-        batch_size = x_token[0].size(0)
-        total_seq_len = initial_seq_len + pred_len
-        full_stamp = torch.cat([x_stamp, y_stamp], dim=1)
 
-        generated_pre = x_token[0].new_empty(batch_size, pred_len)
-        generated_post = x_token[1].new_empty(batch_size, pred_len)
-
-        pre_buffer = x_token[0].new_zeros(batch_size, max_context)
-        post_buffer = x_token[1].new_zeros(batch_size, max_context)
-        buffer_len = min(initial_seq_len, max_context)
-        if buffer_len > 0:
-            start_idx = max(0, initial_seq_len - max_context)
-            pre_buffer[:, :buffer_len] = x_token[0][:, start_idx:start_idx + buffer_len]
-            post_buffer[:, :buffer_len] = x_token[1][:, start_idx:start_idx + buffer_len]
-
-        if verbose:
-            ran = trange
-        else:
-            ran = range
-        for i in ran(pred_len):
-            current_seq_len = initial_seq_len + i
-            window_len = min(current_seq_len, max_context)
-
-            if current_seq_len <= max_context:
-                input_tokens = [
-                    pre_buffer[:, :window_len],
-                    post_buffer[:, :window_len]
-                ]
-            else:
-                input_tokens = [pre_buffer, post_buffer]
-
-            context_end = current_seq_len
-            context_start = max(0, context_end - max_context)
-            current_stamp = full_stamp[:, context_start:context_end, :].contiguous()
-
-            s1_logits, context = model.decode_s1(input_tokens[0], input_tokens[1], current_stamp)
-            s1_logits = s1_logits[:, -1, :]
-            sample_pre = sample_from_logits(s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
-
-            s2_logits = model.decode_s2(context, sample_pre)
-            s2_logits = s2_logits[:, -1, :]
-            sample_post = sample_from_logits(s2_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True)
-
-            generated_pre[:, i] = sample_pre.squeeze(-1)
-            generated_post[:, i] = sample_post.squeeze(-1)
-
-            if current_seq_len < max_context:
-                pre_buffer[:, current_seq_len] = sample_pre.squeeze(-1)
-                post_buffer[:, current_seq_len] = sample_post.squeeze(-1)
-            else:
-                pre_buffer.copy_(torch.roll(pre_buffer, shifts=-1, dims=1))
-                post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
-                pre_buffer[:, -1] = sample_pre.squeeze(-1)
-                post_buffer[:, -1] = sample_post.squeeze(-1)
-
-        full_pre = torch.cat([x_token[0], generated_pre], dim=1)
-        full_post = torch.cat([x_token[1], generated_post], dim=1)
-
-        context_start = max(0, total_seq_len - max_context)
+def _autoregressive_context(
+    pre_buffer: torch.Tensor, post_buffer: torch.Tensor,
+    full_stamp: torch.Tensor, current_seq_len: int, max_context: int,
+) -> tuple[list[torch.Tensor], torch.Tensor]:
+    window_len = min(current_seq_len, max_context)
+    if current_seq_len <= max_context:
         input_tokens = [
-            full_pre[:, context_start:total_seq_len].contiguous(),
-            full_post[:, context_start:total_seq_len].contiguous()
+            pre_buffer[:, :window_len],
+            post_buffer[:, :window_len],
         ]
-        z = tokenizer.decode(input_tokens, half=True)
-        z = z.reshape(-1, sample_count, z.size(1), z.size(2))
-        preds = z.cpu().numpy()
-        preds = np.mean(preds, axis=1)
+    else:
+        input_tokens = [pre_buffer, post_buffer]
+    context_start = max(0, current_seq_len - max_context)
+    current_stamp = full_stamp[:, context_start:current_seq_len, :].contiguous()
+    return input_tokens, current_stamp
 
-        return preds
+
+def _sample_autoregressive_pair(
+    model: Any, input_tokens: list[torch.Tensor], current_stamp: torch.Tensor,
+    temperature: float, top_k: int, top_p: float,
+    generator: torch.Generator | None, deadline: float | None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    s1_logits, context = model.decode_s1(
+        input_tokens[0], input_tokens[1], current_stamp,
+    )
+    ensure_before_deadline(deadline)
+    sample_pre = sample_from_logits(
+        s1_logits[:, -1, :], temperature=temperature, top_k=top_k,
+        top_p=top_p, sample_logits=True, generator=generator,
+    )
+    s2_logits = model.decode_s2(context, sample_pre)
+    ensure_before_deadline(deadline)
+    sample_post = sample_from_logits(
+        s2_logits[:, -1, :], temperature=temperature, top_k=top_k,
+        top_p=top_p, sample_logits=True, generator=generator,
+    )
+    return sample_pre.squeeze(-1), sample_post.squeeze(-1)
+
+
+def _append_autoregressive_tokens(
+    generated_pre: torch.Tensor, generated_post: torch.Tensor,
+    pre_buffer: torch.Tensor, post_buffer: torch.Tensor,
+    sample_pre: torch.Tensor, sample_post: torch.Tensor,
+    step: int, current_seq_len: int, max_context: int,
+) -> None:
+    generated_pre[:, step] = sample_pre
+    generated_post[:, step] = sample_post
+    if current_seq_len < max_context:
+        pre_buffer[:, current_seq_len] = sample_pre
+        post_buffer[:, current_seq_len] = sample_post
+        return
+    pre_buffer.copy_(torch.roll(pre_buffer, shifts=-1, dims=1))
+    post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
+    pre_buffer[:, -1] = sample_pre
+    post_buffer[:, -1] = sample_post
+
+
+def _decode_autoregressive_samples(
+    tokenizer: Any, x_token: Any, generated_pre: torch.Tensor,
+    generated_post: torch.Tensor, total_seq_len: int, max_context: int,
+    sample_count: int, deadline: float | None,
+) -> np.ndarray:
+    ensure_before_deadline(deadline)
+    full_pre = torch.cat([x_token[0], generated_pre], dim=1)
+    full_post = torch.cat([x_token[1], generated_post], dim=1)
+    context_start = max(0, total_seq_len - max_context)
+    input_tokens = [
+        full_pre[:, context_start:total_seq_len].contiguous(),
+        full_post[:, context_start:total_seq_len].contiguous(),
+    ]
+    decoded = tokenizer.decode(input_tokens, half=True)
+    ensure_before_deadline(deadline)
+    decoded = decoded.reshape(-1, sample_count, decoded.size(1), decoded.size(2))
+    return decoded.cpu().numpy()
+
+
+def auto_regressive_inference(
+    tokenizer: Any, model: Any, x: torch.Tensor, x_stamp: torch.Tensor,
+    y_stamp: torch.Tensor, max_context: int, pred_len: int, clip: float = 5,
+    T: float = 1.0, top_k: int = 0, top_p: float = 0.99,
+    sample_count: int = 5, verbose: bool = False,
+    generator: torch.Generator | None = None, return_samples: bool = False,
+    deadline: float | None = None,
+) -> np.ndarray:
+    with torch.no_grad():
+        ensure_before_deadline(deadline)
+        x = torch.clip(x, -clip, clip)
+        state = _prepare_autoregressive_state(
+            tokenizer, x, x_stamp, y_stamp, max_context, pred_len, sample_count,
+        )
+        (
+            x_token, full_stamp, generated_pre, generated_post,
+            pre_buffer, post_buffer, initial_seq_len, total_seq_len,
+        ) = state
+        ran = trange if verbose else range
+        for i in ran(pred_len):
+            ensure_before_deadline(deadline)
+            current_seq_len = initial_seq_len + i
+            input_tokens, current_stamp = _autoregressive_context(
+                pre_buffer, post_buffer, full_stamp, current_seq_len, max_context,
+            )
+            sample_pre, sample_post = _sample_autoregressive_pair(
+                model, input_tokens, current_stamp, T, top_k, top_p,
+                generator, deadline,
+            )
+            _append_autoregressive_tokens(
+                generated_pre, generated_post, pre_buffer, post_buffer,
+                sample_pre, sample_post, i, current_seq_len, max_context,
+            )
+        samples = _decode_autoregressive_samples(
+            tokenizer, x_token, generated_pre, generated_post, total_seq_len,
+            max_context, sample_count, deadline,
+        )
+        if return_samples:
+            return samples
+        return np.mean(samples, axis=1)
 
 
 def calc_time_stamps(x_timestamp):
@@ -515,6 +587,105 @@ class KronosPredictor:
                                           self.clip, T, top_k, top_p, sample_count, verbose)
         preds = preds[:, -pred_len:, :]
         return preds
+
+    def generate_paths(
+        self, x: np.ndarray, x_stamp: np.ndarray, y_stamp: np.ndarray,
+        pred_len: int, T: float, top_k: int, top_p: float,
+        sample_count: int, sample_batch_size: int, seed: int,
+        deadline: float | None = None,
+    ) -> np.ndarray:
+        """按小批次采样，避免一次生成全部路径造成显存峰值。"""
+        batches = []
+        for offset in range(0, sample_count, sample_batch_size):
+            ensure_before_deadline(deadline)
+            count = min(sample_batch_size, sample_count - offset)
+            generator = torch.Generator(device=self.device)
+            generator.manual_seed(seed + offset)
+            batch = self._generate_path_batch(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, count, generator, deadline)
+            batches.append(batch)
+        return np.concatenate(batches, axis=1)
+
+    def _generate_path_batch(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, generator, deadline=None):
+        x_tensor = torch.from_numpy(np.asarray(x, dtype=np.float32)).to(self.device)
+        x_stamp_tensor = torch.from_numpy(np.asarray(x_stamp, dtype=np.float32)).to(self.device)
+        y_stamp_tensor = torch.from_numpy(np.asarray(y_stamp, dtype=np.float32)).to(self.device)
+        samples = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len, self.clip, T, top_k, top_p, sample_count, False, generator, True, deadline)
+        return samples[:, :, -pred_len:, :]
+
+    def predict_paths(
+        self,
+        df: pd.DataFrame,
+        x_timestamp: pd.Series | pd.DatetimeIndex,
+        y_timestamp: pd.Series | pd.DatetimeIndex,
+        pred_len: int = 60,
+        sample_count: int = 100,
+        sample_batch_size: int = 20,
+        seed: int | None = None,
+        T: float = 0.6,
+        top_p: float = 0.9,
+        top_k: int = 0,
+        deadline: float | None = None,
+    ) -> PredictionPaths:
+        """生成真实采样路径，且不改变旧 ``predict`` 的均值路径行为。"""
+        x, x_stamp, y_stamp, mean, std = self._prepare_prediction_input(df, x_timestamp, y_timestamp)
+        self._validate_path_request(pred_len, sample_count, sample_batch_size, len(y_stamp[0]))
+        sample_batch_size = min(sample_batch_size, sample_count)
+        params_hash = sampling_params_hash(pred_len, sample_count, sample_batch_size, T, top_p, top_k)
+        resolved_seed = self._resolve_seed(seed, x, y_stamp, params_hash)
+        samples = self.generate_paths(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, sample_batch_size, resolved_seed, deadline)
+        paths = samples.squeeze(0) * (std + 1e-5) + mean
+        repaired, repaired_values = self._repair_paths(paths)
+        timestamps = pd.DatetimeIndex(pd.to_datetime(y_timestamp))
+        mean_df = pd.DataFrame(repaired.mean(axis=0), columns=self.price_cols + [self.vol_col, self.amt_vol], index=timestamps)
+        flags = ("PATH_REPAIR_EXCESSIVE",) if repaired_values / max(1, repaired.size) > 0.01 else ()
+        return PredictionPaths(repaired.astype(np.float32), mean_df, timestamps, sample_count, resolved_seed, self._object_id(self.model), self._object_id(self.tokenizer), params_hash, repaired_values, flags)
+
+    def _prepare_prediction_input(self, df, x_timestamp, y_timestamp):
+        if not isinstance(df, pd.DataFrame) or not all(col in df.columns for col in self.price_cols):
+            raise ValueError("输入必须是包含 OHLC 列的 pandas DataFrame。")
+        x_timestamp = pd.Series(x_timestamp) if isinstance(x_timestamp, pd.DatetimeIndex) else x_timestamp
+        y_timestamp = pd.Series(y_timestamp) if isinstance(y_timestamp, pd.DatetimeIndex) else y_timestamp
+        prepared = df.copy()
+        if self.vol_col not in prepared:
+            prepared[self.vol_col] = 0.0
+        if self.amt_vol not in prepared:
+            prepared[self.amt_vol] = prepared[self.vol_col] * prepared[self.price_cols].mean(axis=1)
+        values = prepared[self.price_cols + [self.vol_col, self.amt_vol]].to_numpy(dtype=np.float32)
+        if np.isnan(values).any():
+            raise ValueError("输入数据包含 OHLCVA 空值。")
+        mean, std = values.mean(axis=0), values.std(axis=0)
+        normalized = np.clip((values - mean) / (std + 1e-5), -self.clip, self.clip)
+        return normalized[None, :], calc_time_stamps(x_timestamp).to_numpy(dtype=np.float32)[None, :], calc_time_stamps(y_timestamp).to_numpy(dtype=np.float32)[None, :], mean, std
+
+    @staticmethod
+    def _validate_path_request(pred_len, sample_count, sample_batch_size, timestamp_count):
+        if pred_len <= 0 or pred_len != timestamp_count:
+            raise ValueError("pred_len 必须与预测时间戳数量一致且大于零。")
+        if sample_count <= 0 or sample_batch_size <= 0:
+            raise ValueError("采样数量和采样批大小必须大于零。")
+
+    @staticmethod
+    def _repair_paths(paths):
+        repaired = np.array(paths, dtype=np.float64, copy=True)
+        before = repaired.copy()
+        repaired[:, :, 1] = np.maximum.reduce([repaired[:, :, 0], repaired[:, :, 1], repaired[:, :, 2], repaired[:, :, 3]])
+        repaired[:, :, 2] = np.minimum.reduce([repaired[:, :, 0], repaired[:, :, 1], repaired[:, :, 2], repaired[:, :, 3]])
+        repaired[:, :, 4:] = np.maximum(repaired[:, :, 4:], 0.0)
+        return repaired, int(np.count_nonzero(repaired != before))
+
+    @staticmethod
+    def _object_id(obj):
+        return str(getattr(obj, "name_or_path", type(obj).__name__))
+
+    @staticmethod
+    def _sampling_hash(T, top_p, top_k, sample_count, pred_len=60, sample_batch_size=20):
+        return sampling_params_hash(pred_len, sample_count, sample_batch_size, T, top_p, top_k)
+
+    def _resolve_seed(self, seed, x, y_stamp, params_hash):
+        if seed is not None:
+            return int(seed)
+        payload = np.asarray(x).tobytes() + np.asarray(y_stamp).tobytes() + params_hash.encode()
+        return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big") % (2**63 - 1)
 
     def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True):
 

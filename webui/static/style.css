@@ -3,9 +3,6 @@
    设计方向：专业量化终端（Bloomberg Terminal / TradingView Dark）
    ========================================================================= */
 
-/* ---- 字体导入 ---- */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
 /* ---- 设计令牌 ---- */
 :root {
   /* 背景层级 */
@@ -55,8 +52,8 @@
   --shadow-glow: 0 0 24px var(--accent-glow);
 
   /* 字体 */
-  --font-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  --font-display: 'Segoe UI', 'Microsoft YaHei', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, monospace;
 
   /* 圆角 */
   --radius-sm: 4px;

@@ -5,9 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kronos 决策系统 | 交易信号分析</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .migration-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 18px;
+            margin-bottom: 16px;
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid rgba(0, 212, 170, 0.25);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .migration-banner a {
+            flex-shrink: 0;
+            padding: 6px 12px;
+            background: var(--accent);
+            color: var(--text-inverse);
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .migration-banner a:hover {
+            background: var(--accent-secondary);
+        }
+    </style>
 </head>
 <body>
 <div class="container">
+    {% if show_migration_banner %}
+    <div class="migration-banner">
+        <span>此页面为旧版决策报告，仅保留历史行为对照。新版提供更严格的证据门禁与可追溯研究。</span>
+        <a href="/report">进入新版决策报告</a>
+    </div>
+    {% endif %}
 
     <!-- ============================================================ -->
     <!-- 顶部标题栏 -->

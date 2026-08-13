@@ -7,6 +7,8 @@ import pytest
 import torch
 from tqdm import tqdm
 
+pytestmark = pytest.mark.model
+
 from model import Kronos, KronosPredictor, KronosTokenizer
 
 TEST_DATA_ROOT = Path(__file__).parent / "data"
@@ -86,6 +88,56 @@ def test_kronos_predictor_regression(context_len):
     print(f"Abs diff: {np.max(abs_diff)}, Rel diff: {np.max(rel_diff)}")
 
     np.testing.assert_allclose(obtained, expected, rtol=REL_TOLERANCE)
+
+
+def test_predict_paths_mean_matches_legacy_predict():
+    """阶段1门禁：真实采样路径的均值必须与旧 predict() 在容差内一致。"""
+    set_seed(SEED)
+
+    context_len = 256
+    df = pd.read_csv(INPUT_DATA_PATH, parse_dates=["timestamps"])
+    if df.shape[0] < context_len + PRED_LEN:
+        raise ValueError("Example data does not contain enough rows for the compatibility test.")
+
+    context_df = df.iloc[:context_len].copy()
+    context_features = context_df[FEATURE_NAMES].reset_index(drop=True)
+    x_timestamp = context_df["timestamps"].reset_index(drop=True)
+    future_timestamp = df["timestamps"].iloc[context_len : context_len + PRED_LEN].reset_index(drop=True)
+
+    tokenizer = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base", revision=TOKENIZER_REVISION)
+    model = Kronos.from_pretrained("NeoQuasar/Kronos-small", revision=MODEL_REVISION)
+    tokenizer.eval()
+    model.eval()
+    predictor = KronosPredictor(model, tokenizer, device=DEVICE, max_context=MAX_CTX_LEN)
+
+    with torch.no_grad():
+        legacy = predictor.predict(
+            df=context_features,
+            x_timestamp=x_timestamp,
+            y_timestamp=future_timestamp,
+            pred_len=PRED_LEN,
+            T=1.0,
+            top_k=1,
+            top_p=1.0,
+            verbose=False,
+            sample_count=1,
+        )
+        paths = predictor.predict_paths(
+            context_features,
+            x_timestamp,
+            future_timestamp,
+            pred_len=PRED_LEN,
+            sample_count=1,
+            sample_batch_size=1,
+            seed=0,
+            T=1.0,
+            top_k=1,
+            top_p=1.0,
+        )
+
+    obtained = paths.mean_df[FEATURE_NAMES].to_numpy(dtype=np.float32)
+    expected = legacy[FEATURE_NAMES].to_numpy(dtype=np.float32)
+    np.testing.assert_allclose(obtained, expected, rtol=REL_TOLERANCE, atol=1e-5)
 
 @pytest.mark.parametrize("context_len, expected_mse", zip(MSE_CTX_LEN, MSE_EXPECTED))
 def test_kronos_predictor_mse(context_len, expected_mse):

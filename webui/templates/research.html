@@ -1,0 +1,99 @@
+{% extends "base_v2.html" %}
+
+{% block title %}Kronos 研究证据{% endblock %}
+
+{% block page_header %}
+    <h1>研究证据</h1>
+    <div class="subtitle">Research Evidence</div>
+{% endblock %}
+
+{% block content %}
+    <section class="research-status wb-card" aria-label="运行状态">
+        <div class="status-line">
+            <span id="run-badge" class="wb-badge">--</span>
+            <span id="run-phase" class="phase-label">--</span>
+        </div>
+        <div class="status-meta" id="status-meta"></div>
+    </section>
+
+    <section class="wb-card" id="gate-card" hidden aria-label="证据门禁">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+            证据门禁
+        </h3>
+        <div class="gate-summary" id="gate-summary"></div>
+        <div class="gate-list" id="gate-list"></div>
+    </section>
+
+    <section class="wb-card" id="metrics-card" hidden aria-label="核心指标">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-trend-up"></use></svg>
+            核心指标
+        </h3>
+        <div class="metric-grid" id="metrics-grid"></div>
+    </section>
+
+    <section class="wb-card" id="calibration-card" hidden aria-label="滚动样本外校准">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-research"></use></svg>
+            严格滚动样本外校准
+        </h3>
+        <p class="wb-note">覆盖率和 ECE 仅基于每个锚点之前拟合的校准档案；样本不足时不作为有效统计。</p>
+        <div class="horizon-grid" id="calibration-grid"></div>
+    </section>
+
+    <section class="wb-card" id="baselines-card" hidden aria-label="基线比较">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+            基线比较（研究展示，不计入门禁）
+        </h3>
+        <div id="baselines-body"></div>
+    </section>
+
+    <section class="wb-card" id="forward-card" hidden aria-label="前瞻验证">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-clock"></use></svg>
+            前瞻验证（与历史回测分开报告）
+        </h3>
+        <div id="forward-body"></div>
+    </section>
+
+    <section class="wb-card" id="daily-forward-card" hidden aria-label="每日建议前瞻台账">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-clock"></use></svg>
+            每日建议前瞻台账（独立于历史回测与正式门禁）
+        </h3>
+        <div id="daily-forward-body"></div>
+    </section>
+
+    <section class="wb-card" id="details-card" hidden aria-label="运行清单详情">
+        <h3>
+            <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+            运行清单详情
+        </h3>
+        <details id="details-block">
+            <summary>查看清单、命令、哈希与时间</summary>
+            <div class="details-body" id="details-body"></div>
+        </details>
+    </section>
+
+    <section class="wb-card" id="empty-card" hidden aria-label="空状态">
+        <div class="wb-empty">
+            <div class="wb-empty-title">尚无评估运行记录</div>
+            <p class="wb-empty-desc">在终端运行以下命令生成可追溯的研究证据。</p>
+            <div class="copy-command" id="smoke-command">
+                <code>python -m evaluation.run --stage smoke --as-of YYYY-MM-DD</code>
+                <button type="button" class="wb-copy-btn" data-target="smoke-command" aria-label="复制 smoke 命令">复制</button>
+            </div>
+            <div class="copy-command" id="full-command">
+                <code>python -m evaluation.run --stage full --as-of YYYY-MM-DD</code>
+                <button type="button" class="wb-copy-btn" data-target="full-command" aria-label="复制 full 命令">复制</button>
+            </div>
+            <p class="wb-note">请将 YYYY-MM-DD 替换为有效的交易日。</p>
+        </div>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='research.js') }}"></script>
+{% endblock %}

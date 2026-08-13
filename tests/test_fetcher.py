@@ -2,6 +2,8 @@
 import pytest
 from data.fetcher import DataFetcher, DataSourceError
 
+pytestmark = pytest.mark.network
+
 
 @pytest.fixture
 def fetcher():

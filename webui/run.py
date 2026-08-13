@@ -7,35 +7,34 @@ import os
 import sys
 import subprocess
 
-def check_dependencies():
+def check_dependencies() -> bool:
     """Check if dependencies are installed"""
     try:
         import flask
-        import flask_cors
         import pandas
         import numpy
         import plotly
-        print("✅ All dependencies installed")
+        print("[OK] All dependencies installed")
         return True
     except ImportError as e:
-        print(f"❌ Missing dependency: {e}")
+        print(f"[ERROR] Missing dependency: {e}")
         print("Please run: pip install -r requirements.txt")
         return False
 
-def install_dependencies():
+def install_dependencies() -> bool:
     """Install dependencies"""
     print("Installing dependencies...")
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-        print("✅ Dependencies installation completed")
+        print("[OK] Dependencies installation completed")
         return True
     except subprocess.CalledProcessError:
-        print("❌ Dependencies installation failed")
+        print("[ERROR] Dependencies installation failed")
         return False
 
-def main():
+def main() -> None:
     """Main function"""
-    print("🚀 Starting Kronos Web UI...")
+    print("Starting Kronos Web UI...")
     print("=" * 50)
     
     # Check dependencies
@@ -52,31 +51,34 @@ def main():
     try:
         sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from model import Kronos, KronosTokenizer, KronosPredictor
-        print("✅ Kronos model library available")
+        print("[OK] Kronos model library available")
         model_available = True
     except ImportError:
-        print("⚠️  Kronos model library not available, will use simulated prediction")
+        print("[WARNING] Kronos model library not available, will use simulated prediction")
         model_available = False
     
     # Start Flask application
-    print("\n🌐 Starting Web server...")
-    
-    # Set environment variables
-    os.environ['FLASK_APP'] = 'app.py'
-    os.environ['FLASK_ENV'] = 'development'
+    print("\nStarting Web server...")
     
     # Start server
     try:
-        from app import app
-        print("✅ Web server started successfully!")
-        print(f"🌐 Access URL: http://localhost:7070")
-        print("💡 Tip: Press Ctrl+C to stop server")
+from app import app
+        print("[OK] Web server started successfully!")
+        print("Access URL: http://127.0.0.1:7070")
+        print("Tip: Press Ctrl+C to stop server")
         
-        # Start Flask application
-        app.run(debug=True, host='0.0.0.0', port=7070)
+        from decision.config import get_config
+
+        web_config = get_config().webui
+        app.run(
+            debug=False,
+            host=web_config.host,
+            port=web_config.port,
+            use_reloader=False,
+        )
         
     except Exception as e:
-        print(f"❌ Startup failed: {e}")
+        print(f"[ERROR] Startup failed: {e}")
         print("Please check if port 7070 is occupied")
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ Tokenizer（量化） → Predictor（自回归 Transformer）
 - **Binary Spherical Quantization (BSQ)**：基于球形量化的离散化方法，有效压缩连续金融数据
 - **Dependency-Aware Layer**：预测 s2 时显式条件化于 s1，保证层级之间的一致性
 - **大规模预训练**：在超过 45 个全球交易所的数据上进行预训练
-- **决策信号层**：基于预测结果的多路径统计分析，通过趋势/风险/反转矩阵生成 BUY/HOLD/SELL 交易信号
+- **决策信号层**：基于预测结果的多路径统计分析与点时门禁，生成五态建议动作 `ADD / HOLD / REDUCE / AVOID / INSUFFICIENT_EVIDENCE`；旧三态 `BUY/HOLD/SELL` 仅作 v1 兼容映射（见 §5.7）
 
 ### 1.3 模型规格
 
@@ -124,8 +124,8 @@ kronos/
 │
 ├── model/                       # 🔴 核心模型库
 │   ├── __init__.py              # 导出 KronosTokenizer, Kronos, KronosPredictor
-│   ├── kronos.py                # Tokenizer + Kronos + Predictor + 推理函数 (~662行)
-│   └── module.py                # 底层模块：BSQ, Attention, Embedding等 (~570行)
+│   ├── kronos.py                # Tokenizer + Kronos + Predictor + 推理函数
+│   └── module.py                # 底层模块：BSQ, Attention, Embedding等
 │
 ├── decision/                    # 🆕 决策信号层
 │   ├── __init__.py              # 包声明
@@ -140,17 +140,28 @@ kronos/
 │   ├── __init__.py              # 包声明
 │   ├── fetcher.py               # A股日K数据获取（akshare + baostock 三级降级）
 │   ├── pool.py                  # 沪深300动态股票池（周级刷新 + 缓存降级）
-│   └── cache/                   # Parquet 缓存目录（行情数据 + 股票池）
+│   └── cache/                   # CSV 缓存目录（行情数据 + 股票池）
 │
-├── webui/                       # 🌐 Flask Web 可视化界面
+├── webui/                       # 🌐 Flask Web 可视化界面（统一浅色"可信投研工作台"主题）
 │   ├── run.py                   # 启动脚本（端口 7070）
-│   ├── app.py                   # Flask 应用（API路由 + 预测逻辑 + 决策报告）
-│   ├── requirements.txt         # Web UI 额外依赖（Flask, plotly）
+│   ├── app.py                   # Flask 应用（页面路由 + v2 决策/评估/组合 API + v1 兼容）
+│   ├── requirements.txt         # Web UI 依赖（Flask、Plotly；无 CDN、无第三方图表/CORS 中间件）
 │   ├── static/
-│   │   └── style.css            # 🆕 深色交易终端主题 (1348行)
+│   │   ├── workbench.css        # v2 浅色工作台主题（base_v2 + report/portfolio/research/settings 共用）
+│   │   ├── workbench.js         # v2 工作台公共脚本（侧栏、导航、最近查询等）
+│   │   ├── report_v2.js         # /report 页脚本（本地 Plotly 渲染 K 线/分位带）
+│   │   ├── portfolio.js         # /portfolio 页脚本（本地组合 + 模拟调仓）
+│   │   ├── research.js          # /research 页脚本（评估门禁/指标/前瞻台账）
+│   │   ├── settings.js          # /settings 页脚本（只读配置诊断）
+│   │   └── style.css            # 旧深色主题（仅 v1 /report/legacy 与 index.html 使用）
 │   └── templates/
-│       ├── index.html           # 原有预测页面
-│       └── report.html          # 🆕 决策报告页面（全中文 UI, 972行）
+│       ├── base_v2.html         # v2 工作台基模板（侧栏导航 + 四页面布局）
+│       ├── report_v2.html       # /report 决策报告 v2 主页面（本地 Plotly K 线 + 五态动作）
+│       ├── portfolio.html       # /portfolio 本地组合
+│       ├── research.html        # /research 研究证据
+│       ├── settings.html        # /settings 系统诊断（只读）
+│       ├── report.html          # /report/legacy v1 兼容页面（旧三态 + Canvas）
+│       └── index.html           # 旧预测页（/ 跳转到 /report，不再作为主入口）
 │
 ├── finetune/                    # 🔧 基于 Qlib 的微调流水线（多GPU DDP）
 │   ├── config.py                # 配置类（数据路径、超参、模型路径）
@@ -170,27 +181,24 @@ kronos/
 │   ├── config_loader.py         # YAML 配置加载器
 │   └── configs/                 # YAML 配置文件目录
 │
-├── examples/                    # 📊 示例脚本
-│   ├── prediction_example.py    # 基础预测示例
-│   ├── prediction_wo_vol_example.py  # 无成交量示例
+├── examples/                    # 📊 示例脚本（仅列仓库跟踪的上游代表性示例）
+│   ├── prediction_example.py        # 基础预测示例
+│   ├── prediction_wo_vol_example.py  # 无成交量预测示例
 │   ├── prediction_batch_example.py   # 批量预测示例
-│   ├── predict_with_confidence.py    # 置信区间预测（分布式推理）
-│   ├── predict_my_stocks.py          # A股预测（腾讯API数据源）
-│   ├── fetch_tencent.py              # 腾讯API数据获取测试
-│   ├── prediction_new.py / prediction_new_GUI.py / etc.
-│   ├── yuce/                    # 回测相关
-│   └── predictions/             # 预测结果输出
+│   ├── predict_with_confidence.py    # 置信区间预测（多路径采样 + 统计评分）
+│   ├── run_backtest_kronos.py        # Kronos 回测脚本
+│   └── yuce/                    # 回测相关脚本与产物（historical_backtest.py 等）
 │
-├── tests/                       # 🧪 测试体系 (10个文件, 28个用例)
+├── tests/                       # 🧪 测试体系（离线回归 + 网络/模型/GPU 按 pytest marker 分开，见 §10.4）
 │   ├── test_kronos_regression.py      # 确定性输出回归测试
-│   ├── test_errors.py                 # 🆕 异常体系测试 (3用例)
-│   ├── test_config.py                 # 🆕 配置管理测试 (3用例)
-│   ├── test_analyzer.py               # 🆕 信号分析器测试 (4用例)
-│   ├── test_model_manager.py          # 🆕 模型管理器测试 (3用例)
-│   ├── test_engine.py                 # 🆕 决策引擎测试 (3用例)
-│   ├── test_fetcher.py                # 🆕 数据获取器测试 (3用例)
-│   ├── test_pool.py                   # 🆕 股票池测试 (2用例)
-│   ├── test_integration.py            # 🆕 集成测试 (3用例)
+│   ├── test_errors.py                 # 🆕 异常体系测试
+│   ├── test_config.py                 # 🆕 配置管理测试
+│   ├── test_analyzer.py               # 🆕 信号分析器测试
+│   ├── test_model_manager.py          # 🆕 模型管理器测试
+│   ├── test_engine.py                 # 🆕 决策引擎测试
+│   ├── test_fetcher.py                # 🆕 数据获取器测试
+│   ├── test_pool.py                   # 🆕 股票池测试
+│   ├── test_integration.py            # 🆕 集成测试
 │   └── data/
 │       ├── regression_input.csv       # 测试输入数据
 │       ├── regression_output_256.csv  # 预期输出（context=256）
@@ -496,7 +504,7 @@ DataFetcher（数据获取）→ ModelManager（模型管理）→ SignalAnalyze
 
 由 `DecisionEngine` 统一编排，外部只需调用一个方法即可获得完整 `DecisionReport`。
 
-### 5.2 `decision/errors.py` — 层次化异常体系（25 行）
+### 5.2 `decision/errors.py` — 层次化异常体系
 
 ```python
 KronosError(Exception)          # 基类，所有项目异常的根
@@ -509,18 +517,18 @@ KronosError(Exception)          # 基类，所有项目异常的根
 
 **设计原则**：所有异常均可被 `DecisionEngine` 统一捕获，转为 `DecisionReport(status='error')` 而不向上抛出，确保外部调用者无需处理异常。
 
-### 5.3 `decision/config.py` + `config.yaml` — 配置管理（139 + 39 行）
+### 5.3 `decision/config.py` + `config.yaml` — 配置管理
 
 **Config Dataclass 结构：**
 ```python
 @dataclass
 class Config:
-    model: ModelConfig            # tokenizer/predictor 路径、device
-    prediction: PredictionConfig  # pred_len, T, top_p, sample_count, context
-    signal: SignalConfig          # buy_threshold, sell_threshold, confidence_min
-    data: DataConfig              # cache_ttl, max_retries, timeout
-    webui: WebUIConfig            # host, port, debug
-    logging: LoggingConfig        # level, file, max_size
+    model: ModelConfig            # tokenizer/predictor 路径与修订、max_context、device、idle_timeout_minutes
+    prediction: PredictionConfig  # default_pred_len、default_sample_count、default_temperature、default_top_p、timeout_seconds、fallback_sample_count
+    signal: SignalConfig          # 趋势/风险阈值、RSI 反转参数、一致性阈值
+    data: DataConfig              # cache_dir、cache_ttl_hours、retry_max、retry_backoff_seconds、primary_source、backup_source、optional_sources、tushare_token_env
+    webui: WebUIConfig            # host、port、stock_pool（仅本机回环地址）
+    logging: LoggingConfig        # level、file、max_size_mb、backup_count
 ```
 
 **线程安全单例模式：**
@@ -528,23 +536,25 @@ class Config:
 - `reload_config()` — 热重载，无需重启进程
 - `save_config()` — 修改配置后写回 YAML 持久化
 
-### 5.4 `decision/model_manager.py` — 模型生命周期管理（122 行）
+### 5.4 `decision/model_manager.py` — 模型生命周期管理
 
 ```python
 class ModelManager:
-    def get_predictor() -> KronosPredictor  # 懒加载，首次调用从 HF Hub 下载
-    def is_ready() -> bool                   # 模型是否已加载到 GPU
-    def is_loading() -> bool                 # 是否正在下载中
-    def _cleanup()                           # 空闲超时后释放 GPU 显存
-    def _release_gpu()                       # 将模型移至 CPU 释放显存
+    def get_predictor() -> tuple[object, object]  # 懒加载，返回 (tokenizer, predictor)；兼容旧调用方
+    def lease() -> Iterator[tuple[object, object]]  # 上下文管理器，长任务应使用租约而非 get_predictor
+    def is_ready() -> bool                   # 模型是否已加载且可用
+    def _schedule_cleanup()                 # 安排一次性定时器释放显存
+    def _cleanup()                           # 定时器回调：空闲超时后释放 GPU 显存
+    def _release_gpu()                       # 将模型移至 CPU 并清空实例引用
 ```
 
 **关键机制：**
-- **懒加载**：`get_predictor()` 首次调用时才从 HuggingFace Hub 下载并实例化，避免启动时长时间阻塞
-- **超时释放**：后台线程每 60 秒检查一次，若超过 `idle_timeout_minutes`（默认 10 分钟）无访问，自动调用 `_release_gpu()` 将模型移至 CPU 释放 GPU 显存
+- **懒加载**：`get_predictor()` / `lease()` 首次调用时才从 HuggingFace Hub 下载 tokenizer 与 predictor 并实例化，避免启动时长时间阻塞
+- **租约优先**：长任务应使用 `lease()` 上下文管理器（Engine 即用此）；存在活跃租约（`_active_leases > 0`）时空闲清理器不得释放模型
+- **超时释放**：最后一个租约结束（或 `get_predictor()` 调用）后，启动**一次性** `threading.Timer`，定时长度为 `model.idle_timeout_minutes`（默认 10 分钟，取自配置）。定时器触发 `_cleanup()`：若无活跃租约且距上次访问已超阈值则调用 `_release_gpu()` 将模型移至 CPU 释放显存；否则重新调度。任意新的 `get_predictor()` / `lease()` 调用都会先 `_cancel_cleanup_timer()` 取消待触发定时器
 - **全局单例**：通过工厂函数 `get_model_manager()` 获取唯一实例
 
-### 5.5 `decision/analyzer.py` — 信号分析器（224 行）
+### 5.5 `decision/analyzer.py` — 信号分析器
 
 多路径预测结果 → 交易信号的决策引擎。
 
@@ -588,7 +598,7 @@ class SignalResult:
     confidence: float         # 综合置信度 (0~1)
 ```
 
-### 5.6 `decision/engine.py` — 决策引擎（165 行）
+### 5.6 `decision/engine.py` — 决策引擎
 
 端到端编排器，连接数据、模型、分析三大组件。
 
@@ -596,42 +606,54 @@ class SignalResult:
 class DecisionEngine:
     def predict_and_analyze(
         stock_code: str,
-        pred_len: int = 120,
-        temperature: float = 1.0,
-        top_p: float = 0.99,
-        sample_count: int = 50
+        params: dict | None = None
     ) -> DecisionReport
 ```
 
+`params` 为可选字典，未提供时使用配置默认值：`pred_len = prediction.default_pred_len`（默认 60）、`temperature = default_temperature`（默认 0.6）、`top_p = default_top_p`（默认 0.9）、`sample_count = default_sample_count`（默认 100）。CPU 设备且请求采样数超过 `fallback_sample_count`（默认 10）时自动降级并标记 `reduced_for_cpu`。`as_of`、`include_display_paths` 等通过同一 `params` 字典传入。
+
 **编排流程：**
-1. `DataFetcher.fetch_daily(stock_code)` — 获取历史 K 线
-2. `ModelManager.get_predictor()` — 获取/加载模型
-3. `KronosPredictor.predict()` — 自回归推理，生成多路径预测
-4. `SignalAnalyzer.analyze()` — 分析预测路径，生成交易信号
-5. 返回 `DecisionReport` 结构体
+1. `DataFetcher.fetch_daily_bundle(stock_code, as_of=...)` — 获取历史 K 线及其来源/新鲜度/质量标记
+2. `ModelManager.lease()` — 租用（按需加载）tokenizer 与 predictor
+3. `predictor.predict_paths(...)` — 自回归多路径采样推理
+4. `SignalAnalyzer.analyze()` — 分析预测路径生成 `SignalResult`
+5. `legacy_signal(action)` 将 v2 五态动作映射回旧三态写入 `report.signal.signal`
+6. 返回 `DecisionReport` 结构体
 
 **异常安全设计（兜底策略）：**
 - 所有异常在 Engine 层被捕获
-- 异常时返回 `DecisionReport(status='error', error=错误描述)` 而非抛出
-- 部分降级：数据异常返回 `status='degraded'`，模型异常返回 `status='error'`
+- 异常时返回 `DecisionReport(status='error', error_message=错误描述)` 而非抛出
+- 部分降级：证据门禁未通过或动作为 `INSUFFICIENT_EVIDENCE` 时返回 `status='degraded'`；模型异常返回 `status='error'`
 - 外部调用者**始终**收到一个 `DecisionReport`，无需 try-except
 
 ```python
 @dataclass
 class DecisionReport:
-    status: str              # 'ok' | 'error' | 'degraded'
-    stock_code: str          # 股票代码
-    stock_name: str          # 股票名称
-    signal: str              # 'BUY' | 'HOLD' | 'SELL'
-    reason: str              # 信号理由
-    current_price: float     # 当前收盘价
-    predictions: ndarray     # (pred_len, 6) 预测 OHLCV 均值
-    confidence: float        # 综合置信度
-    trend: TrendResult       # 趋势分析详情
-    risk: RiskResult         # 风险分析详情
-    elapsed_seconds: float   # 总耗时
-    error: Optional[str]     # 错误信息（仅异常时）
+    status: Literal["ok", "error", "degraded"]
+    error_message: str = ""
+    signal: SignalResult | None = None       # 旧三态 SignalResult（signal/signal_reason 已映射自 v2 动作）
+    prediction: dict[str, Any] | None = None # horizons、data_provenance、sampling、chart_data 等
+    stock_code: str = ""
+    stock_name: str = ""
+    generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    elapsed_seconds: float = 0.0
 ```
+
+### 5.7 v2 五态建议与旧三态兼容映射🆕
+
+`decision/v2.py` 定义正式的**五态建议动作枚举** `RecommendationAction`，是 v2 决策的主动作：
+
+```
+ADD                    # 正式证据支持增持
+HOLD                   # 未触发动作阈值
+REDUCE                 # 正式证据支持降低现有持仓（仅当已持仓）
+AVOID                  # 资格/风险阻断，或未持仓但证据指向下行
+INSUFFICIENT_EVIDENCE  # 证据门禁未通过，不产生交易动作
+```
+
+- **判定规则**（`decide_action`）：以 20 日为主、5/60 日否决的固定五态规则；门禁未通过一律 `INSUFFICIENT_EVIDENCE`，资格/风险阻断一律 `AVOID`。动作**只由结构化规则决定**，不受网页端采样参数覆写。
+- **旧三态兼容映射**（`legacy_signal`）：仅用于 v1 `BUY/HOLD/SELL` API 的安全映射——`ADD→BUY`、`{REDUCE,AVOID}→SELL`、`HOLD/INSUFFICIENT_EVIDENCE→HOLD`。**旧三态不是主动作**，仅为兼容旧接口保留。
+- `DecisionEngine.decision_report_v2()` 为 v2 可审计报告入口；`predict_and_analyze()` 为 v1 兼容入口，其 `signal` 字段为旧三态 `SignalResult`。
 
 ---
 
@@ -641,7 +663,7 @@ class DecisionReport:
 
 数据管道负责 A 股日 K 线数据的获取、缓存和校验，采用**三级降级策略**保证高可用。
 
-### 6.2 `data/fetcher.py` — 数据获取器（207 行）
+### 6.2 `data/fetcher.py` — 数据获取器
 
 ```python
 class DataFetcher:
@@ -653,7 +675,7 @@ class DataFetcher:
 ```
 请求 stock_code
   │
-  ├─ 第一级：Parquet 本地缓存
+  ├─ 第一级：CSV 本地缓存
   │    命中 + 未过期 → 直接返回（最快）
   │    命中 + 已过期 → 尝试远程更新
   │
@@ -682,11 +704,11 @@ class DataFetcher:
 - 缺失 `volume`/`amount` 自动填 0
 
 **缓存策略：**
-- 缓存格式：Parquet（`data/cache/{stock_code}.parquet`）
-- TTL：交易时段内 5 分钟，收盘后（16:00 后）立即过期
-- 强制刷新：传入 `force_refresh=True` 跳过缓存
+- 缓存格式：CSV（`data/cache/{stock_code}.csv`，不依赖 pyarrow/Parquet），并配套 `.meta.json` 记录来源、质量标记与 fallback chain
+- 新鲜度：按 `data.cache_ttl_hours`（默认 24 小时）判断缓存是否过期（`_is_cache_fresh` 用文件 mtime）；`fetch_daily` / `fetch_daily_bundle` 不提供强制刷新参数，远程更新成功后原子写回缓存
+- 过期或质量校验失败的缓存降级使用并标记 `STALE_CACHE`；无缓存且所有数据源失败时抛出 `DataSourceError`
 
-### 6.3 `data/pool.py` — 沪深 300 股票池（84 行）
+### 6.3 `data/pool.py` — 沪深 300 股票池
 
 ```python
 def get_hs300_pool() -> dict[str, str]  # {code: name}，如 {"600519": "贵州茅台"}
@@ -695,7 +717,7 @@ def refresh_pool() -> dict[str, str]     # 强制刷新，无视缓存
 
 **刷新策略：**
 - 通过 akshare 动态获取最新沪深 300 成分股
-- 本地 parquet 缓存（`data/cache/pool_hs300.parquet`）
+- 本地 CSV 缓存（`data/cache/pool_hs300.csv`）
 - 7 天自动刷新（避免频繁网络请求）
 - Web 设置页可手动触发强制刷新
 - akshare 不可用时降级使用过期缓存
@@ -706,19 +728,25 @@ def refresh_pool() -> dict[str, str]     # 强制刷新，无视缓存
 
 ### 7.1 架构概述
 
-基于 Flask + Plotly + Chart.js 的可视化界面，端口 7070。提供两大功能页面：
-- **预测页面**（`/`）：原有数据文件加载 + 模型预测 + K 线图表
-- **决策报告页面**（`/report`）🆕：沪深 300 实时预测 + BUY/HOLD/SELL 交易信号
+统一浅色"可信投研工作台"主题，基于 **Flask + 本地 Plotly**，端口 7070，无 CDN、无远程字体。根路径 `/` 跳转到 `/report`；四个主页面共基模板 `base_v2.html` + `workbench.css` + `workbench.js`：
+
+- **`/report`**（`report_v2.html` + `report_v2.js`）：v2 五态决策报告主入口。固定采样参数生成可审计报告，五态动作 `ADD/HOLD/REDUCE/AVOID/INSUFFICIENT_EVIDENCE`（旧三态 `BUY/HOLD/SELL` 仅作 v1 兼容映射）；K 线、均值路径与真实路径分位带由**本地 Plotly** 渲染（`plotly.min.js` 经本地 Python 包路由 `/assets/plotly.min.js` 提供），**不使用原生 Canvas、不引入第三方图表库**。
+- **`/portfolio`**（`portfolio.html` + `portfolio.js`）：本地持仓组合页，展示持仓与约束上限，并触发"生成模拟调仓"（证据门禁通过时返回目标权重与订单，**永不执行真实交易**）。
+- **`/research`**（`research.html` + `research.js`）：正式研究证据页，展示证据门禁、核心指标、滚动样本外校准、基线比较、前瞻验证与每日建议前瞻台账。
+- **`/settings`**（`settings.html` + `settings.js`）：系统诊断只读页，展示配置路径、模型/运行环境、预测参数、数据源与缓存、最新证据；外部修改配置需重启服务，且会使既有证据哈希失效。
+- **`/report/legacy`**：v1 兼容页面，渲染旧 `report.html`：旧三态 `BUY/HOLD/SELL`、深色主题（`style.css`）、**原生 Canvas 2D** 蜡烛图。仅作旧行为对照，不再作为主入口。
+
+> v2 报告采样参数为固定值，不可在页面上修改；"在线修改采样参数"仅保留在旧兼容页面中，外部修改会使证据档案失效。
 
 ### 7.2 启动方式
 
 ```shell
-cd webui && python run.py    # → http://localhost:7070
+cd webui && python run.py    # → http://127.0.0.1:7070
 ```
 
 ### 7.3 `webui/run.py` — 启动脚本
 
-- 检查依赖安装状态（flask, flask_cors, pandas, numpy, plotly）
+- 检查依赖安装状态（flask, pandas, numpy, plotly）
 - 自动检测 Kronos 模型库可用性
 - 自动安装缺失依赖
 - 启动后自动打开浏览器
@@ -729,17 +757,23 @@ cd webui && python run.py    # → http://localhost:7070
 
 | 端点 | 方法 | 功能 |
 |------|------|------|
-| `/` | GET | 主页（渲染 HTML 模板） |
-| `/report` | GET | 🆕 决策报告页面（渲染 `report.html`） |
-| `/api/data-files` | GET | 扫描 data/ 目录，返回可用数据文件列表 |
-| `/api/load-data` | POST | 加载指定数据文件，返回数据统计信息 |
-| `/api/predict` | POST | 执行预测，返回 Plotly JSON 图表 |
-| `/api/load-model` | POST | 从 HuggingFace 加载指定模型 |
-| `/api/available-models` | GET | 返回可用模型列表及状态 |
-| `/api/model-status` | GET | 返回当前模型加载状态 |
-| `/api/decision-report` | POST | 🆕 生成决策报告（接收 `{stock_code, pred_len, ...}` → `DecisionEngine.predict_and_analyze()`） |
-| `/api/stock-list` | GET | 🆕 获取沪深 300 股票池列表（`[{code, name}]`） |
-| `/api/config` | GET / PUT | 🆕 配置查询与更新（GET 返回全量配置，PUT 逐字段更新并持久化） |
+| `/` | GET | 跳转到 `/report` |
+| `/report` | GET | v2 五态决策报告主页面（`report_v2.html`） |
+| `/report/legacy` | GET | v1 兼容页面（旧三态 `BUY/HOLD/SELL` + Canvas，渲染 `report.html`） |
+| `/portfolio`、`/research`、`/settings` | GET | v2 工作台三主页面 |
+| `/assets/plotly.min.js` | GET | 本地 plotly.min.js（由已安装的 plotly 包 `package_data` 返回，无 CDN） |
+| `/api/v2/decision-report` | POST | v2 五态决策报告（固定采样；校验 `stock_code`/`as_of`；写本地建议历史） |
+| `/api/v2/evaluation/latest` | GET | 返回最近一次可追溯评估运行的清单与门禁结果 |
+| `/api/v2/forward-ledger/latest` | GET | 返回最新每日建议前瞻台账 |
+| `/api/v2/portfolio` | GET / PUT | 读取或更新本地 SQLite 持仓（不保存外部交易凭据） |
+| `/api/v2/portfolio/rebalance` | POST | 证据门禁通过时生成模拟目标权重与订单；永不执行真实交易 |
+| `/api/v2/recommendations` | GET | 返回本地保存的建议历史（支持 `portfolio_id`、`limit`） |
+| `/api/config` | GET / PUT | 配置查询与更新（GET 返回全量配置；PUT 逐字段更新并持久化） |
+| `/api/decision-report` | POST | v1 兼容：生成旧三态决策报告（`DecisionEngine.predict_and_analyze`） |
+| `/api/stock-list` | GET | 获取沪深 300 股票池列表（`[{code, name}]`） |
+| `/api/data-files`、`/api/load-data`、`/api/predict` | GET / POST | 旧预测页数据加载与预测（`/api/predict` 返回 Plotly JSON 图表，由本地 Plotly 在后端构造） |
+| `/api/load-model`、`/api/available-models`、`/api/model-status` | GET / POST | 模型加载与状态查询 |
+| 写请求安全 | before_request | 拒绝非本机网页来源（非本机 Origin）的 `POST/PUT/PATCH/DELETE`，避免本地 API 被跨站调用 |
 
 **支持的模型配置：**
 ```python
@@ -756,57 +790,54 @@ AVAILABLE_MODELS = {
 }
 ```
 
-**图表生成：**
-- 使用 Plotly Candlestick 绘制 K 线图
-- 历史数据（蓝色）、预测数据（绿色）、实际数据（橙色）三线叠加
+**图表生成（仅旧 `/api/predict`）：**
+- 后端用 Plotly Candlestick 构造 K 线图，返回 Plotly JSON
+- 历史数据（蓝）、预测数据（绿）、实际数据（橙）三段叠加
 - 自动检测时间频率并保证 x 轴连续性
+- v2 决策报告的 K 线不在后端构造，而由 `report_v2.js` 在前端用本地 Plotly 渲染
 
 **预测结果保存：**
 - 自动保存到 `webui/prediction_results/` 目录
 - JSON 格式，包含输入摘要、预测结果、实际对比
 
-### 7.5 `webui/static/style.css` — 深色交易终端主题🆕（1348 行）
+### 7.5 `webui/static/workbench.css` — v2 浅色"可信投研工作台"主题
 
-**设计令牌（CSS 变量体系）：**
-```css
-:root {
-    --bg-base: #0a0e17;        /* 基座背景 */
-    --bg-panel: #131820;       /* 面板背景 */
-    --bg-inset: #0d121b;       /* 内嵌区域 */
-    --accent: #00d4aa;         /* 青绿强调色（三档透明变体） */
-    --signal-buy: #00c853;     /* 买入绿 */
-    --signal-sell: #ff1744;    /* 卖出红 */
-    --signal-hold: #ffab00;    /* 持有橙 */
-}
-```
+适用于 `base_v2.html` 及 `/report`、`/portfolio`、`/research`、`/settings` 四页面；与旧 `style.css` 相互独立维护。
 
-- 字体：`Space Grotesk`（标题）+ `JetBrains Mono`（等宽数字）
-- 关键组件：`.card`（卡片面板）、`.signal-badge`（信号标签 BUY/HOLD/SELL 配色）、`.metric`（指标数字）、`.kline-chart`（K 线图容器）
-- 动画：`@keyframes fadeUp`（入场动画）、`reportReveal`（报告渐现）
+**设计令牌（CSS 变量）：**
+- 背景：`--wb-bg-base` 浅灰、`--wb-bg-panel` 白、`--wb-bg-inset` 浅灰内嵌；侧栏藏青 `--wb-navy`。
+- 强调：`--wb-accent` 蓝；A 股信号"红涨绿跌"：`--wb-add`（增持红）、`--wb-reduce`（减持绿）、`--wb-hold`（橙）、`--wb-avoid`、`--wb-insufficient`。
+- 字体：**本地系统字体栈**（标题 `--wb-font-display`、等宽数字 `--wb-font-mono`），不引入远程字体、无 `@import`/`@font-face`/CDN。
+- 关键组件：`.wb-card` 卡片、`.wb-form` 表单、`.wb-grid` 网格、`.wb-action-*` 五态动作徽章、`.wb-badge` 状态徽章、`.gate-*` 门禁卡片。
 
-### 7.6 `webui/templates/report.html` — 决策报告页面🆕（972 行）
+### 7.6 `webui/templates/report_v2.html` + `report_v2.js` — v2 决策报告主页面
 
-**页面布局：**
-1. **顶部标题栏**：logo + 标题 + 实时状态指示器
-2. **控制栏**：股票代码下拉框（沪深 300 动态加载）、预测参数输入（pred_len / T / top_p）
-3. **信号区域**：BUY / HOLD / SELL 大标签 + 中文理由 + 实时时钟
-4. **分析面板**（四列 CSS Grid）：趋势分析、风险评估、技术指标、一致性评分
-5. **K 线走势图**：Canvas + Chart.js 渲染，历史数据 + 预测叠加
+**页面区块（按 `report_v2.html` 结构）：**
+1. **查询卡**：股票代码/名称输入 + 联想列表 + "显示真实采样路径（最多 20 条）"复选 + "生成决策报告"按钮 + 最近查询栏。
+2. **状态/错误卡**：状态文案与结构化错误（`error-code`、`error-message`、`error-details`、重试按钮），动态内容用 `textContent` 渲染，禁用 `innerHTML`。
+3. **5 / 20 / 60 日预测分布卡**：三期限预测分布概览。
+4. **K 线图卡**：`<div id="chart">` 容器，由 `report_v2.js` 调用 `global.Plotly.newPlot(root, traces, layout, config)` 渲染历史 K 线、均值路径与真实路径分位带；Plotly 经 `/assets/plotly.min.js` 引入本地包。**不使用 Canvas、不引入第三方图表库。**
+5. **数据来源与证据门禁区**：`data_provenance`、十三项证据门禁 `gate-list`、五态动作 `report-action`、影响/市场背景/基本面等辅助卡（不改变量化动作）。
 
-**内联 JavaScript（约 500 行，IIFE 模式）：**
-- `init()` → `generateReport(stockCode, params)` → 调用 `/api/decision-report`
-- `renderSignal()`：渲染信号大标签 + 理由
-- `renderKlineChart()`：Chart.js 渲染历史 + 预测 K 线
-- `renderMetrics()`：四列指标网格
-- `showAlert()` / `clearAlert()`：错误/警告提示条
+**脚本约束（`report_v2.js`）：**
+- 不通过 `innerHTML` 渲染 API 数据，所有动态内容使用 `textContent`/`createElement`。
+- 本地 Plotly 渲染，无 CDN、无第三方图表库、无原生 Canvas。
+- 五态动作标签：`ADD 增持 / HOLD 持有 / REDUCE 减持 / AVOID 回避 / INSUFFICIENT_EVIDENCE 证据不足`。
+
+### 7.7 旧页面兼容说明
+
+`webui/templates/report.html`（深色 `style.css`）与 `webui/templates/index.html` 为 v1 旧资产，仅经 `/report/legacy` 兼容保留：
+- `report.html` 使用**原生 Canvas 2D** 蜡烛图（`canvas.getContext('2d')`），并内联旧三态逻辑，演示"在线修改采样参数"。
+- `index.html` 为最早的数据文件加载 + 模型预测页，根路径 `/` 已跳转到 `/report`，不再作为主入口。
+- 上述旧页面的深色主题、Canvas 蜡烛图、内联脚本不在 v2 主线维护范围，仅供旧行为对照。
 
 ---
 
 ## 八、微调模块
 
-### 6.1 `finetune/` — 基于 Qlib 的微调流水线
+### 8.1 `finetune/` — 基于 Qlib 的微调流水线
 
-#### 6.1.1 配置文件：`config.py`
+#### 8.1.1 配置文件：`config.py`
 
 ```python
 class Config:
@@ -831,12 +862,12 @@ class Config:
     inference_sample_count = 5
 ```
 
-#### 6.1.2 训练流程
+#### 8.1.2 训练流程
 
 **阶段 1：Tokenizer 微调**
 
 ```
-torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_tokenizer.py
+torchrun --standalone --nproc_per_node=NUM_GPUS -m finetune.train_tokenizer
 ```
 
 - 损失函数：`(recon_loss_pre + recon_loss_all + bsq_loss) / 2`
@@ -847,14 +878,14 @@ torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_tokenizer.py
 **阶段 2：Predictor 微调**
 
 ```
-torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_predictor.py
+torchrun --standalone --nproc_per_node=NUM_GPUS -m finetune.train_predictor
 ```
 
 - 必须先完成 Tokenizer 微调（predictor 依赖微调后的 tokenizer 做量化）
 - 损失函数：`(CE_s1 + CE_s2) / 2`（交叉熵）
 - Tokenizer 冻结（eval 模式），仅更新 Predictor 参数
 
-#### 6.1.3 数据处理
+#### 8.1.3 数据处理
 
 **`qlib_data_preprocess.py`：**
 - 从 Qlib 加载沪深300成分股 OHLCV 数据
@@ -867,7 +898,7 @@ torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_predictor.py
 - 随机采样滑动窗口
 - 仅用 lookback 窗口计算统计量进行归一化（防止数据泄露）
 
-#### 6.1.4 回测
+#### 8.1.4 回测
 
 **`qlib_test.py`：**
 - 加载微调后模型进行推理
@@ -875,16 +906,16 @@ torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_predictor.py
 - 使用 Qlib 的 `TopkDropoutStrategy` 进行回测
 - 输出累计收益曲线并保存图表
 
-### 6.2 `finetune_csv/` — 基于 CSV 的简化微调流水线
+### 8.2 `finetune_csv/` — 基于 CSV 的简化微调流水线
 
-#### 6.2.1 设计理念
+#### 8.2.1 设计理念
 
 相比 `finetune/`，此流水线更简洁：
 - 直接从 CSV 文件加载数据（无需 Qlib 依赖）
 - YAML 配置文件管理所有超参数
 - 顺序训练（先 Tokenizer、再 Predictor）
 
-#### 6.2.2 启动方式
+#### 8.2.2 启动方式
 
 ```shell
 python finetune_csv/train_sequential.py --config finetune_csv/configs/your_config.yaml
@@ -892,7 +923,7 @@ python finetune_csv/train_sequential.py --config finetune_csv/configs/your_confi
 
 支持命令行参数：`--skip-tokenizer`, `--skip-basemodel`, `--skip-existing`
 
-#### 6.2.3 config_loader.py
+#### 8.2.3 config_loader.py
 
 **ConfigLoader**：YAML 配置加载器，支持：
 - 动态路径解析（`{exp_name}` 占位符替换）
@@ -908,14 +939,14 @@ class CustomFinetuneConfig:
     # 设备: use_cuda, device_id
 ```
 
-#### 6.2.4 CustomKlineDataset
+#### 8.2.4 CustomKlineDataset
 
 相比 QlibDataset 的改进：
 - 直接读取 CSV（`pd.read_csv`）
 - 按时间比例划分 train/val/test（非按日期）
 - 训练时使用确定性哈希采样（`(idx * 9973 + epoch * 104729) % max_start`）保证可复现
 
-#### 6.2.5 训练编排：SequentialTrainer
+#### 8.2.5 训练编排：SequentialTrainer
 
 ```python
 class SequentialTrainer:
@@ -935,7 +966,7 @@ class SequentialTrainer:
 
 ## 九、示例脚本
 
-### 7.1 prediction_example.py — 基础预测
+### 9.1 prediction_example.py — 基础预测
 
 典型使用模式：
 ```python
@@ -949,11 +980,11 @@ pred_df = predictor.predict(
 )
 ```
 
-### 7.2 prediction_wo_vol_example.py — 无成交量预测
+### 9.2 prediction_wo_vol_example.py — 无成交量预测
 
 展示仅使用 OHLC（无 volume/amount）的情况，模型自动用 0 填充。
 
-### 7.3 prediction_batch_example.py — 批量预测
+### 9.3 prediction_batch_example.py — 批量预测
 
 ```python
 pred_df_list = predictor.predict_batch(
@@ -966,9 +997,9 @@ pred_df_list = predictor.predict_batch(
 
 所有序列必须具有**相同的历史长度和预测长度**。
 
-### 7.4 predict_with_confidence.py — 置信区间预测
+### 9.4 predict_with_confidence.py — 置信区间预测
 
-最复杂的示例（576 行），功能包括：
+最复杂的示例，功能包括：
 - 通过腾讯财经 API 拉取 A 股日线数据（前复权）
 - 自动判断上交所/深交所（`6/9` 开头 → sh，`0/2/3` 开头 → sz）
 - **分布式推理**：生成 50 条样本路径（每批 10 条），不做平均
@@ -986,23 +1017,19 @@ pred_df_list = predictor.predict_batch(
 - **交易信号**：BUY / HOLD / SELL / WAIT
 - **可视化**：双层图（价格路径+置信带 + 期末分布直方图）
 
-### 7.5 predict_my_stocks.py — A 股预测
+### 9.5 其他跟踪脚本
 
-对农业银行（601288）、中国平安（601318）、声讯科技（003004）进行预测，每只股票单独生成图表。
-
-### 7.6 fetch_tencent.py — 腾讯 API 测试
-
-独立的腾讯财经数据获取测试脚本。
+`examples/` 还跟踪 `prediction_cn_markets_day.py`（A 股日 K 预测）、`run_backtest_kronos.py`（回测）、`yuce/historical_backtest.py`（回测相关脚本与产物）。以上游代表性示例（9.1–9.4）与 `webui/`、`evaluation/run.py` 为正式使用入口；`examples/predictions/` 输出目录不纳入版本库，详见 `.gitignore`。
 
 ---
 
 ## 十、测试体系
 
-### 8.1 测试架构
+### 10.1 测试架构
 
 基于 pytest，使用固定的 HuggingFace 模型版本保证确定性输出。
 
-### 8.2 回归测试
+### 10.2 回归测试
 
 **`test_kronos_predictor_regression`：**
 - 加载固定 revision 的模型
@@ -1015,7 +1042,7 @@ pred_df_list = predictor.predict_batch(
 - 计算每个窗口的预测 MSE
 - 验证平均 MSE 与预期值的差异不超过 1e-6
 
-### 8.3 固定版本
+### 10.3 固定版本
 
 ```python
 MODEL_REVISION = "901c26c1332695a2a8f243eb2f37243a37bea320"
@@ -1024,11 +1051,46 @@ SEED = 123
 DEVICE = "cpu"  # 测试固定在 CPU 上运行
 ```
 
+### 10.4 离线回归覆盖与 pytest marker
+
+测试按 pytest marker（`pytest.ini`）分层运行，默认 `addopts = -m "not network and not model and not gpu"`，即**离线回归默认不跑网络/模型/GPU 用例**：
+
+| marker | 含义 | 运行方式 |
+|--------|------|----------|
+| `network` | 需要访问外部数据源或网络服务（akshare/baostock 等） | 离线默认跳过，需显式 `-m network` |
+| `model` | 需要加载真实 Kronos 模型（本地缓存或网络下载） | 离线默认跳过，需显式 `-m model` |
+| `gpu` | 需要 CUDA 或其他 GPU 环境 | 离线默认跳过，需显式 `-m gpu` |
+
+**离线回归覆盖范围**（不依赖网络/真实模型/GPU）：
+- `decision/`：异常体系、配置管理、信号分析器规则、模型管理器单例、v2 五态动作与旧三态映射、版本/门禁契约
+- `data/`：fetcher 缓存与三级降级、股票池、交易日历、资格判定、数据契约、市场上下文、事件风险
+- `evaluation/`：研究指标、校准、基准、绑定、前瞻台账、回填、点时门禁
+- `portfolio/`：组合优化器、再平衡服务、持仓存储
+- `webui/`：Web 安全、报告页 v2 契约、研究工作台 UI/组合/设置
+
+网络用例（如真实 600519 抓取、沪深 300 池刷新、`test_engine`/`test_integration`）与模型用例（如 `test_kronos_regression` 确定性回归）分别由 `network`/`model` marker 标记，单独运行；GPU 诊断由 `gpu` marker 标记。具体用例数随迭代持续增长，不在此固定数字。
+
+### 10.5 研究状态与免责声明
+
+> 本系统是**本地研究工具**，不构成任何投资建议。
+
+**尚未完成（不得宣称已通过）：**
+- 正式完整沪深 300 回测（周锚点 2017-01-01 起、100 条真实路径、全收益基准、未限制 `--stocks`）尚未跑通；
+- 20 日以上前瞻验证尚未完成；
+- 多边界 GPU canary 仍属诊断性质。
+
+**未宣称：**
+- 不宣称投资有效；
+- 不宣称全量研究已通过；
+- 证据门禁未通过即不得产生交易动作（输出 `INSUFFICIENT_EVIDENCE`）。
+
+**已验证（小型数据集）：** Qlib 点时成分导入与回测在小型数据集上跑通；全收益基准导入脚本可工作；离线回归覆盖 decision/data/evaluation/portfolio/webui 各模块契约。详见 `README.md` 研究状态表。
+
 ---
 
 ## 十一、依赖与环境
 
-### 9.1 核心依赖（requirements.txt）
+### 11.1 核心依赖（requirements.txt）
 
 ```
 numpy, pandas, torch>=2.0.0
@@ -1039,25 +1101,32 @@ tqdm==4.67.1        # 进度条
 safetensors==0.6.2  # 模型序列化
 ```
 
-### 9.2 Web UI 额外依赖
+### 11.2 Web UI 额外依赖
 
 ```
-Flask, flask-cors, plotly
+Flask, Plotly, Pandas, NumPy
 ```
 
-### 9.3 微调额外依赖
+- 不依赖任何第三方前端图表库或前端 CDN；
+- Plotly 的 `plotly.min.js` 由本地 Python 包路由 `/assets/plotly.min.js` 提供（`webui/app.py` 从已安装的 plotly 包 `package_data` 返回压缩版 JS）；
+- v2 决策报告页（`/report`）的 K 线、均值路径与分位带由**本地 Plotly**在前端渲染；
+- 旧兼容页 `/report/legacy` 的 K 线才使用原生 Canvas 2D，仅为 v1 旧行为对照。
+
+### 11.3 微调与数据管道额外依赖
 
 ```
-pyqlib  (Qlib 微调流水线)
-comet_ml  (可选，实验追踪)
-pyyaml  (CSV 流水线配置)
+pyqlib     (Qlib 微调流水线)
+comet_ml   (可选，实验追踪)
+pyyaml     (CSV 流水线配置 + decision/config.yaml)
+akshare    (A股数据源，主)
+baostock   (A股数据源，备)
 ```
 
 ---
 
 ## 十二、开发规范与注意事项
 
-### 10.1 关键陷阱
+### 12.1 关键陷阱
 
 > ⚠️ 来自 AGENTS.md 的重要注意事项
 
@@ -1068,13 +1137,13 @@ pyyaml  (CSV 流水线配置)
 5. **finetune/ 中的 AI 生成注释**：由 Gemini 2.5 Pro 生成，以代码逻辑为准
 6. **模型权重不进 Git**：`.pth/.pt/.ckpt/.bin` 均被排除，必须从 HuggingFace Hub 下载
 
-### 10.2 DataFrame 约定
+### 12.2 DataFrame 约定
 
 - 必需列：`['open', 'high', 'low', 'close']`
 - 可选列：`volume`, `amount`（缺失时自动填 0）
 - 时间戳列：`timestamps` / `timestamp` / `date`
 
-### 10.3 模型保存与加载
+### 12.3 模型保存与加载
 
 所有模型继承 `PyTorchModelHubMixin`，支持：
 ```python
@@ -1083,7 +1152,16 @@ model = Kronos.from_pretrained("./path")
 model = Kronos.from_pretrained("NeoQuasar/Kronos-small")
 ```
 
-### 10.4 无 lint/formatter
+### 12.4 编码规范🆕
+
+- **中文注释/文档/日志/错误信息**：所有用户可读文本使用简体中文
+- **英文标识符**：变量名、函数名、类名、文件名使用英文（遵循 PEP 8）
+- **单一职责文件**：每个 `.py` 文件聚焦一个核心类或功能
+- **函数不超过 60 行**：保持函数粒度可控
+- **公开 API 类型注解**：对外暴露的函数和方法使用完整的 Python 类型注解
+- **异常安全**：`DecisionEngine` 始终返回 `DecisionReport`，不抛出异常；数据层异常在 Engine 兜底处理
+
+### 12.5 无 lint/formatter
 
 项目没有 `.flake8`、`ruff.toml` 或 `pyproject.toml`，修改代码时不要引入格式化工具配置。
 
@@ -1091,14 +1169,14 @@ model = Kronos.from_pretrained("NeoQuasar/Kronos-small")
 
 ## 十三、安装与运行指南
 
-### 11.1 环境准备
+### 13.1 环境准备
 
 ```shell
 # Python 3.10+
 pip install -r requirements.txt
 ```
 
-### 11.2 快速预测
+### 13.2 快速预测
 
 ```python
 from model import Kronos, KronosTokenizer, KronosPredictor
@@ -1110,33 +1188,33 @@ predictor = KronosPredictor(model, tokenizer, max_context=512)
 pred_df = predictor.predict(df=x_df, x_timestamp=x_ts, y_timestamp=y_ts, pred_len=120)
 ```
 
-### 11.3 微调（Qlib 流水线）
+### 13.3 微调（Qlib 流水线）
 
 ```shell
 # 1. 修改 finetune/config.py 中的路径
 # 2. 数据预处理
-python finetune/qlib_data_preprocess.py
+python -m finetune.qlib_data_preprocess
 # 3. 微调 tokenizer
-torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_tokenizer.py
+torchrun --standalone --nproc_per_node=NUM_GPUS -m finetune.train_tokenizer
 # 4. 微调 predictor
-torchrun --standalone --nproc_per_node=NUM_GPUS finetune/train_predictor.py
+torchrun --standalone --nproc_per_node=NUM_GPUS -m finetune.train_predictor
 # 5. 回测
-python finetune/qlib_test.py --device cuda:0
+python -m finetune.qlib_test --device cuda:0
 ```
 
-### 11.4 微调（CSV 流水线）
+### 13.4 微调（CSV 流水线）
 
 ```shell
 python finetune_csv/train_sequential.py --config finetune_csv/configs/your_config.yaml
 ```
 
-### 11.5 Web UI
+### 13.5 Web UI
 
 ```shell
-cd webui && python run.py    # → http://localhost:7070
+cd webui && python run.py    # → http://127.0.0.1:7070
 ```
 
-### 11.6 运行测试
+### 13.6 运行测试
 
 ```shell
 pytest tests/
@@ -1191,5 +1269,5 @@ pytest tests/
 ---
 
 > 📝 文档生成时间：2026-07-09  
-> 📝 最后更新：2026-07-11（新增 decision/、data/ 模块，Web UI 增强，测试扩展）  
-> 📝 基于项目源码深度分析，覆盖 model/、decision/、data/、webui/、finetune/、finetune_csv/、examples/、tests/ 全部关键文件
+> 📝 最后更新：2026-08-13（发布前事实校正：四主页面浅色工作台主题、新 `/report` 使用本地 Plotly、旧 `/report/legacy` Canvas 仅作兼容、v2 评估/组合/调仓/建议 API、API 表补全、移除行数/用例计数、示例章节只列仓库跟踪文件）
+> 📝 基于项目源码深度分析，覆盖 model/、decision/、data/、evaluation/、portfolio/、webui/、finetune/、finetune_csv/、examples/、tests/ 全部关键文件

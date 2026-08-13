@@ -1,4 +1,5 @@
 from .kronos import KronosTokenizer, Kronos, KronosPredictor
+from .prediction import PredictionPaths
 
 model_dict = {
     'kronos_tokenizer': KronosTokenizer,

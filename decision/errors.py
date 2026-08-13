@@ -21,5 +21,5 @@ class ModelNotReadyError(KronosError):
     """模型未加载或加载失败。"""
 
 
-class PredictionTimeoutError(KronosError):
+class PredictionTimeoutError(KronosError, TimeoutError):
     """模型推理超时。"""

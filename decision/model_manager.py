@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import threading
-import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+from typing import Iterator
 
 from decision.config import get_config
 from decision.errors import ModelNotReadyError
@@ -25,6 +26,8 @@ class ModelManager:
         cfg = get_config().model
         self._tokenizer_name = cfg.tokenizer
         self._predictor_name = cfg.predictor
+        self._tokenizer_revision = cfg.tokenizer_revision
+        self._model_revision = cfg.model_revision
         self._max_context = cfg.max_context
         self._device = cfg.device
         self._idle_timeout = timedelta(minutes=cfg.idle_timeout_minutes)
@@ -32,11 +35,12 @@ class ModelManager:
         self._tokenizer = None
         self._predictor = None
         self._last_access: datetime | None = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._cleanup_timer: threading.Timer | None = None
+        self._active_leases = 0
 
-    def get_predictor(self):
-        """获取 KronosPredictor 实例（懒加载 + 线程安全）。
+    def get_predictor(self) -> tuple[object, object]:
+        """兼容旧调用方地获取模型；内部长任务应使用 ``lease``。
 
         Returns:
             KronosPredictor 实例
@@ -45,15 +49,34 @@ class ModelManager:
             ModelNotReadyError: 模型加载失败
         """
         with self._lock:
-            self._last_access = datetime.now()
             self._cancel_cleanup_timer()
-            if self._predictor is not None:
-                return self._tokenizer, self._predictor
+            return self._get_or_load()
+
+    @contextmanager
+    def lease(self) -> Iterator[tuple[object, object]]:
+        """租用模型；存在活跃租约时空闲清理器不得释放模型。"""
+        with self._lock:
+            self._cancel_cleanup_timer()
+            tokenizer, predictor = self._get_or_load()
+            self._active_leases += 1
+        try:
+            yield tokenizer, predictor
+        finally:
+            with self._lock:
+                self._active_leases = max(0, self._active_leases - 1)
+                self._last_access = datetime.now()
+                if self._active_leases == 0:
+                    self._schedule_cleanup()
+
+    def _get_or_load(self) -> tuple[object, object]:
+        """在持锁状态下返回已加载模型或执行一次懒加载。"""
+        self._last_access = datetime.now()
+        if self._predictor is None:
             try:
                 self._load_model()
-                return self._tokenizer, self._predictor
-            except Exception as e:
-                raise ModelNotReadyError(f"模型加载失败: {e}") from e
+            except Exception as exc:
+                raise ModelNotReadyError(f"模型加载失败: {exc}") from exc
+        return self._tokenizer, self._predictor
 
     def is_ready(self) -> bool:
         """检查模型是否已加载且可用。"""
@@ -67,16 +90,18 @@ class ModelManager:
                 return False
 
     def _load_model(self) -> None:
-        """实际加载模型到 GPU。"""
+        """按固定修订加载模型，并按配置选择设备。"""
         from model import Kronos, KronosTokenizer, KronosPredictor
-        self._tokenizer = KronosTokenizer.from_pretrained(self._tokenizer_name)
-        self._predictor = Kronos.from_pretrained(self._predictor_name)
+        self._tokenizer = KronosTokenizer.from_pretrained(self._tokenizer_name, revision=self._tokenizer_revision)
+        self._predictor = Kronos.from_pretrained(self._predictor_name, revision=self._model_revision)
+        device = None if self._device == "auto" else self._device
         self._predictor = KronosPredictor(
-            self._predictor, self._tokenizer, max_context=self._max_context
+            self._predictor, self._tokenizer, device=device, max_context=self._max_context
         )
 
     def _schedule_cleanup(self) -> None:
         """调度定时释放显存。"""
+        self._cancel_cleanup_timer()
         self._cleanup_timer = threading.Timer(
             self._idle_timeout.total_seconds(), self._cleanup
         )
@@ -91,10 +116,16 @@ class ModelManager:
     def _cleanup(self) -> None:
         """超时后释放 GPU 显存。"""
         with self._lock:
-            if self._predictor is not None and self._last_access is not None:
-                elapsed = datetime.now() - self._last_access
-                if elapsed >= self._idle_timeout:
-                    self._release_gpu()
+            self._cleanup_timer = None
+            if self._active_leases > 0 or self._predictor is None:
+                return
+            if self._last_access is None:
+                return
+            elapsed = datetime.now() - self._last_access
+            if elapsed >= self._idle_timeout:
+                self._release_gpu()
+            else:
+                self._schedule_cleanup()
 
     def _release_gpu(self) -> None:
         """将模型移到 CPU 释放显存。"""

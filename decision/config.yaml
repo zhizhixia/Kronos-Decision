@@ -2,27 +2,31 @@ data:
   backup_source: baostock
   cache_dir: data/cache
   cache_ttl_hours: 24
+  optional_sources: []
   primary_source: akshare
   retry_backoff_seconds:
   - 2
   - 4
   - 8
   retry_max: 3
+  tushare_token_env: TUSHARE_TOKEN
 logging:
   backup_count: 5
   file: logs/kronos.log
   level: INFO
   max_size_mb: 50
 model:
-  device: cuda
+  device: auto
   idle_timeout_minutes: 10
   max_context: 512
+  model_revision: 901c26c1332695a2a8f243eb2f37243a37bea320
   predictor: NeoQuasar/Kronos-small
   tokenizer: NeoQuasar/Kronos-Tokenizer-base
+  tokenizer_revision: 0e0117387f39004a9016484a186a908917e22426
 prediction:
-  default_pred_len: 120
-  default_sample_count: 50
-  default_temperature: 1.0
+  default_pred_len: 60
+  default_sample_count: 100
+  default_temperature: 0.6
   default_top_p: 0.9
   fallback_sample_count: 10
   timeout_seconds: 60
@@ -34,6 +38,6 @@ signal:
   trend_strength_sell_threshold: 0.4
   var_risk_high_threshold: 0.05
 webui:
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: 7070
   stock_pool: 沪深300

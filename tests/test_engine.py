@@ -2,6 +2,8 @@
 import pytest
 from decision.engine import DecisionEngine, DecisionReport
 
+pytestmark = [pytest.mark.network, pytest.mark.model]
+
 
 @pytest.fixture
 def engine():
