@@ -34,6 +34,9 @@
                 <svg class="icon" aria-hidden="true"><use href="#icon-report"></use></svg>
                 生成决策报告
             </button>
+            <button type="button" id="baseline-btn" class="wb-btn wb-btn-secondary">
+                生成无模型基线
+            </button>
         </div>
         <div class="recent-bar" id="recent-bar" hidden>
             <span class="recent-label">最近查询</span>
@@ -45,6 +48,11 @@
         <div class="report-main">
             <div class="report-status wb-card" id="status-card">
                 <div id="status-message">输入六位股票代码并点击生成报告。</div>
+                <div class="wb-grid wb-grid-3" id="contract-status" aria-label="安全报告状态">
+                    <div class="wb-kv"><span class="wb-kv-key">运行状态</span><span class="wb-kv-value" id="run-status">未运行</span></div>
+                    <div class="wb-kv"><span class="wb-kv-key">证据状态</span><span class="wb-kv-value" id="evidence-status">未生成</span></div>
+                    <div class="wb-kv"><span class="wb-kv-key">动作权限</span><span class="wb-kv-value" id="action-permission">NONE</span></div>
+                </div>
             </div>
 
             <div class="report-error wb-card" id="error-card" hidden>
@@ -159,5 +167,57 @@
 
 {% block scripts %}
     <script src="/assets/plotly.min.js"></script>
+    <script>
+    /* 页面只接受统一安全报告契约，不为缺失字段猜测成功状态。 */
+    (function (global) {
+        "use strict";
+        var runStatuses = ["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"];
+        var evidenceStatuses = ["RESEARCH_ONLY", "QUALIFIED", "INSUFFICIENT", "STALE", "INVALID"];
+        var permissions = ["NONE", "CONDITIONAL_REFERENCE", "INSUFFICIENT_EVIDENCE"];
+
+        function updateContract(payload) {
+            payload = payload && typeof payload === "object" ? payload : {};
+            var run = document.getElementById("run-status");
+            var evidence = document.getElementById("evidence-status");
+            var permission = document.getElementById("action-permission");
+            if (run) run.textContent = String(payload.run_status || "未知");
+            if (evidence) evidence.textContent = String(payload.evidence_status || "未知");
+            if (permission) permission.textContent = String(payload.action_permission || "NONE");
+        }
+
+        function guardResult(result) {
+            updateContract(result && result.payload);
+            if (!result || !result.ok) return result;
+            var payload = result.payload || {};
+            var action = payload.recommendation && payload.recommendation.action;
+            var valid = runStatuses.indexOf(payload.run_status) !== -1 &&
+                evidenceStatuses.indexOf(payload.evidence_status) !== -1 &&
+                permissions.indexOf(payload.action_permission) !== -1;
+            if (payload.action_permission === "CONDITIONAL_REFERENCE") {
+                valid = valid && ["ADD", "HOLD", "REDUCE", "AVOID"].indexOf(action) !== -1;
+            }
+            if (valid) return result;
+            return {
+                ok: false,
+                status: 502,
+                payload: {
+                    status: "error",
+                    run_status: "FAILED",
+                    evidence_status: "INVALID",
+                    action_permission: "NONE",
+                    error: { code: "INVALID_REPORT_CONTRACT", message: "报告契约无效，已拒绝动作参考。", retryable: false, details: {} }
+                },
+                error: { code: "INVALID_REPORT_CONTRACT", message: "报告契约无效，已拒绝动作参考。", retryable: false, details: {} }
+            };
+        }
+
+        if (global.KronosWorkbench && typeof global.KronosWorkbench.postJson === "function") {
+            var originalPostJson = global.KronosWorkbench.postJson;
+            global.KronosWorkbench.postJson = function (url, body, timeoutMs) {
+                return originalPostJson(url, body, timeoutMs).then(guardResult);
+            };
+        }
+    })(window);
+    </script>
     <script src="{{ url_for('static', filename='report_v2.js') }}"></script>
 {% endblock %}

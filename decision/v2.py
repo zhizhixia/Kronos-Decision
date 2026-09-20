@@ -30,13 +30,35 @@ def decide_action(gate_passed: bool, ranks: dict[int, float], up_probabilities: 
     return RecommendationAction.HOLD, ("NO_ACTION_THRESHOLD_MET",)
 
 
-def legacy_signal(action: RecommendationAction) -> str:
-    """旧 BUY/HOLD/SELL API 的安全映射。"""
-    if action is RecommendationAction.ADD:
-        return "BUY"
-    if action in {RecommendationAction.REDUCE, RecommendationAction.AVOID}:
-        return "SELL"
-    return "HOLD"
+def _enum_value(value: Any) -> Any:
+    """读取枚举值；映射层不依赖契约模块，避免循环导入。"""
+    return getattr(value, "value", value)
+
+
+def legacy_signal(
+    action: RecommendationAction | str | None,
+    evidence_status: Any = None,
+    action_permission: Any = None,
+) -> str | None:
+    """仅把有资格的五态动作映射到旧三态信号。
+
+    缺失、未知、证据不足和 AVOID 都是无动作结果，不能借默认值恢复成
+    ``BUY``、``HOLD`` 或 ``SELL``。映射必须同时具备 QUALIFIED 证据和
+    CONDITIONAL_REFERENCE 权限。
+    """
+    if _enum_value(evidence_status) != "QUALIFIED":
+        return None
+    if _enum_value(action_permission) != "CONDITIONAL_REFERENCE":
+        return None
+    try:
+        normalized = action if isinstance(action, RecommendationAction) else RecommendationAction(action)
+    except (TypeError, ValueError):
+        return None
+    return {
+        RecommendationAction.ADD: "BUY",
+        RecommendationAction.HOLD: "HOLD",
+        RecommendationAction.REDUCE: "SELL",
+    }.get(normalized)
 
 
 def error_payload(code: str, message: str, retryable: bool, details: dict[str, Any] | None = None) -> dict[str, Any]:

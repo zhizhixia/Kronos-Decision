@@ -7,6 +7,7 @@ from __future__ import annotations
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Iterator
 
 from decision.config import get_config
@@ -31,6 +32,7 @@ class ModelManager:
         self._max_context = cfg.max_context
         self._device = cfg.device
         self._idle_timeout = timedelta(minutes=cfg.idle_timeout_minutes)
+        self._allow_model_download = cfg.allow_model_download
 
         self._tokenizer = None
         self._predictor = None
@@ -38,6 +40,7 @@ class ModelManager:
         self._lock = threading.RLock()
         self._cleanup_timer: threading.Timer | None = None
         self._active_leases = 0
+        self._last_error: str | None = None
 
     def get_predictor(self) -> tuple[object, object]:
         """兼容旧调用方地获取模型；内部长任务应使用 ``lease``。
@@ -75,6 +78,7 @@ class ModelManager:
             try:
                 self._load_model()
             except Exception as exc:
+                self._last_error = str(exc)
                 raise ModelNotReadyError(f"模型加载失败: {exc}") from exc
         return self._tokenizer, self._predictor
 
@@ -91,13 +95,29 @@ class ModelManager:
 
     def _load_model(self) -> None:
         """按固定修订加载模型，并按配置选择设备。"""
+        local_only = not self._allow_model_download
+        if local_only and not self._local_model_references_exist():
+            raise RuntimeError("模型权重未在本地找到，且配置禁止自动下载。")
         from model import Kronos, KronosTokenizer, KronosPredictor
-        self._tokenizer = KronosTokenizer.from_pretrained(self._tokenizer_name, revision=self._tokenizer_revision)
-        self._predictor = Kronos.from_pretrained(self._predictor_name, revision=self._model_revision)
+        load_options = {"local_files_only": local_only}
+        self._tokenizer = KronosTokenizer.from_pretrained(
+            self._tokenizer_name,
+            revision=self._tokenizer_revision,
+            **load_options,
+        )
+        self._predictor = Kronos.from_pretrained(
+            self._predictor_name,
+            revision=self._model_revision,
+            **load_options,
+        )
         device = None if self._device == "auto" else self._device
         self._predictor = KronosPredictor(
             self._predictor, self._tokenizer, device=device, max_context=self._max_context
         )
+
+    def _local_model_references_exist(self) -> bool:
+        """确认模型和分词器引用均指向本地路径，避免隐式联网。"""
+        return Path(self._tokenizer_name).exists() and Path(self._predictor_name).exists()
 
     def _schedule_cleanup(self) -> None:
         """调度定时释放显存。"""
@@ -132,8 +152,8 @@ class ModelManager:
         try:
             if hasattr(self._predictor, 'model'):
                 self._predictor.model.cpu()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._last_error = f"释放模型显存失败：{exc}"
         self._predictor = None
         self._tokenizer = None
 

@@ -1,6 +1,9 @@
 data:
   backup_source: baostock
   cache_dir: data/cache
+  snapshot_dir: data/snapshots
+  report_db: data/reports/decision.sqlite
+  portfolio_ledger: data/user/portfolio_snapshots.json
   cache_ttl_hours: 24
   optional_sources: []
   primary_source: akshare
@@ -18,6 +21,7 @@ logging:
 model:
   device: auto
   idle_timeout_minutes: 10
+  allow_model_download: false
   max_context: 512
   model_revision: 901c26c1332695a2a8f243eb2f37243a37bea320
   predictor: NeoQuasar/Kronos-small

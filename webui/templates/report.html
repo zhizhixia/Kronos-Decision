@@ -113,6 +113,11 @@
     <!-- 错误 / 降级提示 -->
     <!-- ============================================================ -->
     <div id="alert-area"></div>
+    <div class="report-contract" id="report-contract" aria-label="安全报告状态">
+        <span>运行状态：<strong id="run-status">未运行</strong></span>
+        <span>证据状态：<strong id="evidence-status">未生成</strong></span>
+        <span>动作权限：<strong id="action-permission">NONE</strong></span>
+    </div>
 
     <!-- ============================================================ -->
     <!-- 报告主体区域（生成后显示） -->
@@ -122,17 +127,17 @@
         <!-- 信号卡片 + 标的信息 -->
         <div class="grid-3">
             <!-- 信号卡片 -->
-            <div class="signal-card signal-buy" id="signal-card">
+            <div class="signal-card" id="signal-card">
                 <div class="signal-card-header">
                     <span class="signal-card-label">决策信号</span>
                     <span class="signal-card-stock" id="signal-stock-label">
                         <span class="stock-code">--</span> · --
                     </span>
                 </div>
-                <div class="signal-card-recommendation" id="signal-zh">买入</div>
-                <div class="signal-card-signal-en" id="signal-en">BUY</div>
+                <div class="signal-card-recommendation" id="signal-zh">暂无动作</div>
+                <div class="signal-card-signal-en" id="signal-en">NONE</div>
                 <div class="signal-card-reason" id="signal-reason">
-                    等待生成报告...
+                    尚未生成安全报告。
                 </div>
             </div>
 
@@ -317,6 +322,9 @@
         generateBtn: $('generate-btn'),
         loadingOverlay: $('loading-overlay'),
         alertArea: $('alert-area'),
+        runStatus: $('run-status'),
+        evidenceStatus: $('evidence-status'),
+        actionPermission: $('action-permission'),
         reportSection: $('report-section'),
         emptyState: $('empty-state'),
         metaTime: $('meta-time'),
@@ -774,9 +782,10 @@
                 body: JSON.stringify(payload),
             });
             const report = await res.json();
+            renderContract(report);
 
             if (!res.ok) {
-                throw new Error(report.error_message || `服务端错误 (${res.status})`);
+                throw new Error(report.error_message || (report.error && report.error.message) || `服务端错误 (${res.status})`);
             }
 
             if (report.status === 'error') {
@@ -810,13 +819,25 @@
         }
     }
 
+    function renderContract(report) {
+        const source = report && typeof report === 'object' ? report : {};
+        if (els.runStatus) els.runStatus.textContent = source.run_status || '未知';
+        if (els.evidenceStatus) els.evidenceStatus.textContent = source.evidence_status || '未知';
+        if (els.actionPermission) els.actionPermission.textContent = source.action_permission || 'NONE';
+    }
+
     /* ============================================================
        渲染报告
        ============================================================ */
     function renderReport(report) {
-        const sig = report.signal || {};
-        const signalStr = (sig.signal || 'HOLD').toUpperCase();
-        const map = SIGNAL_MAP[signalStr] || SIGNAL_MAP.HOLD;
+        const permission = report && report.action_permission;
+        const sig = report && report.signal && typeof report.signal === 'object' ? report.signal : {};
+        const signalStr = typeof sig.signal === 'string' ? sig.signal.toUpperCase() : '';
+        const map = SIGNAL_MAP[signalStr];
+        if (permission !== 'CONDITIONAL_REFERENCE' || !map) {
+            renderNoAction(report);
+            return;
+        }
 
         // ---- 信号卡片 ----
         els.signalCard.className = `signal-card signal-${map.cls}`;
@@ -847,6 +868,35 @@
         els.footerGeneratedAt.textContent = formatTime(report.generated_at);
         els.footerElapsed.textContent = report.elapsed_seconds != null
             ? `${Number(report.elapsed_seconds).toFixed(2)}s` : '--';
+    }
+
+    function renderNoAction(report) {
+        const source = report && typeof report === 'object' ? report : {};
+        els.signalCard.className = 'signal-card';
+        els.signalZh.textContent = '暂无动作';
+        els.signalEn.textContent = 'NONE';
+        els.signalReason.textContent = source.error_message || '证据不足：当前不会生成买入、持有或卖出动作参考。';
+        els.signalStockLabel.textContent = `${source.stock_code || '--'} · ${source.stock_name || '--'}`;
+        els.trendArrow.textContent = '—';
+        els.trendArrow.className = 'trend-arrow';
+        els.trendDirectionValue.textContent = '不可用';
+        els.trendDirectionValue.className = 'trend-direction-value';
+        els.trendConfidence.textContent = '不可用';
+        els.trendConfidence.className = 'confidence-badge';
+        els.trendStrengthValue.textContent = '--';
+        els.trendStrengthFill.style.width = '0%';
+        els.trendUpProb.textContent = '--';
+        els.trendConsistency.textContent = '--';
+        els.riskVar.textContent = '--';
+        els.riskVolatility.textContent = '--';
+        els.riskReversal.textContent = '--';
+        els.scoreTableBody.textContent = '暂无可用评分数据';
+        renderChart(null, source.stock_code, source.stock_name);
+        els.footerStock.textContent = `${source.stock_code || '--'} · ${source.stock_name || '--'}`;
+        els.footerSignal.textContent = '暂无动作 (NONE)';
+        els.footerGeneratedAt.textContent = formatTime(source.generated_at);
+        els.footerElapsed.textContent = source.elapsed_seconds != null
+            ? `${Number(source.elapsed_seconds).toFixed(2)}s` : '--';
     }
 
     function renderTrend(trend, map, sig) {

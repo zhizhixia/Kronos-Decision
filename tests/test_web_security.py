@@ -11,6 +11,7 @@ from webui.app import app, load_data_file
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEBUI_DIR = PROJECT_ROOT / "webui"
+LOCAL_ORIGIN_HEADERS = {"Origin": "http://localhost:7070"}
 
 
 def _read_text(path: Path) -> str:
@@ -97,7 +98,8 @@ def test_latest_prediction_uses_trailing_window_and_future_timestamps(tmp_path: 
 
     response = app_module.app.test_client().post(
         "/api/predict",
-        json={"file_path": str(source), "lookback": 4, "pred_len": 2},
+        json={"file_name": source.name, "lookback": 4, "pred_len": 2},
+        headers=LOCAL_ORIGIN_HEADERS,
     )
 
     assert response.status_code == 200
@@ -112,8 +114,17 @@ def test_prediction_timeout_has_distinct_api_error(monkeypatch) -> None:
     def fail(*args, **kwargs):
         raise PredictionTimeoutError("PREDICTION_TIMEOUT")
 
-    monkeypatch.setattr("decision.engine.DecisionEngine.decision_report_v2", fail)
-    response = app.test_client().post("/api/v2/decision-report", json={"stock_code": "600519"})
+    class FakePipeline:
+        def run(self, *args, **kwargs):
+            return fail(*args, **kwargs)
+
+    from webui import app as app_module
+    monkeypatch.setattr(app_module, "_get_report_pipeline_class", lambda: FakePipeline)
+    response = app.test_client().post(
+        "/api/v2/decision-report",
+        json={"stock_code": "600519"},
+        headers=LOCAL_ORIGIN_HEADERS,
+    )
 
     assert response.status_code == 504
     assert response.get_json()["error"]["code"] == "PREDICTION_TIMEOUT"
@@ -169,3 +180,136 @@ def test_all_webui_files_are_utf8_without_bom() -> None:
     for path in paths:
         assert not _starts_with_bom(path), f"{path} 包含 UTF-8 BOM"
         _read_text(path)
+
+
+def test_missing_origin_is_rejected_before_config_save(monkeypatch, tmp_path: Path) -> None:
+    """真实 Flask client 的无 Origin 写请求不得进入配置保存分支。"""
+    import decision.config as config_module
+    from decision.config import Config
+
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_module, "_config_instance", Config())
+
+    response = app.test_client().put(
+        "/api/config",
+        json={"prediction": {"timeout_seconds": 90}},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["error"]["code"] == "ORIGIN_REQUIRED"
+    assert config_module.get_config().prediction.timeout_seconds != 90
+    assert not config_path.exists()
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+
+
+def test_local_origin_requires_exact_http_scheme_and_port(monkeypatch, tmp_path: Path) -> None:
+    """本机主机名的错误 scheme、端口或 URL 结构也必须拒绝。"""
+    import decision.config as config_module
+    from decision.config import Config
+
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_module, "_config_instance", Config())
+    client = app.test_client()
+    invalid_origins = (
+        "https://localhost:7070",
+        "http://localhost:7071",
+        "http://localhost",
+        "http://127.0.0.1:7070/path",
+        "http://[::1]:7071",
+    )
+
+    for origin in invalid_origins:
+        response = client.put(
+            "/api/config",
+            json={"prediction": {"timeout_seconds": 90}},
+            headers={"Origin": origin},
+        )
+        assert response.status_code == 403, origin
+        assert response.get_json()["error"]["code"] == "INVALID_LOCAL_ORIGIN", origin
+
+    assert not config_path.exists()
+
+
+def test_loopback_origins_are_accepted_and_json_keeps_security_headers(monkeypatch, tmp_path: Path) -> None:
+    """三个受支持的回环 Origin 可写，响应仍保持原 JSON 并带统一安全头。"""
+    import decision.config as config_module
+    from decision.config import Config
+
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr(config_module, "_CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_module, "_config_instance", Config())
+    client = app.test_client()
+    for origin in ("http://localhost:7070", "http://127.0.0.1:7070", "http://[::1]:7070"):
+        response = client.put(
+            "/api/config",
+            json={"prediction": {"timeout_seconds": 90}},
+            headers={"Origin": origin},
+        )
+        assert response.status_code == 200, origin
+        assert response.get_json()["status"] == "ok"
+        assert response.headers["Content-Security-Policy"].startswith("default-src 'self'")
+
+
+def test_data_file_api_returns_filename_ids_and_rejects_fake_paths(tmp_path: Path, monkeypatch) -> None:
+    """文件列表只给文件名/ID，加载接口接受 ID 但仍拒绝目录穿越。"""
+    from webui import app as app_module
+
+    allowed = tmp_path / "data"
+    allowed.mkdir()
+    source = allowed / "inside.csv"
+    outside = tmp_path / "outside.csv"
+    frame = {"date": ["2024-01-02"], "open": [1], "high": [2], "low": [0], "close": [1]}
+    pd.DataFrame(frame).to_csv(source, index=False)
+    pd.DataFrame(frame).to_csv(outside, index=False)
+    monkeypatch.setattr(app_module, "DATA_DIRECTORY", allowed)
+    client = app.test_client()
+
+    listing = client.get("/api/data-files")
+    assert listing.status_code == 200
+    entries = listing.get_json()
+    assert entries and entries[0]["id"] == source.name
+    assert all(not Path(entry["path"]).is_absolute() for entry in entries)
+    assert str(allowed) not in listing.get_data(as_text=True)
+
+    loaded = client.post(
+        "/api/load-data",
+        json={"file_id": source.name},
+        headers=LOCAL_ORIGIN_HEADERS,
+    )
+    assert loaded.status_code == 200
+    assert loaded.get_json()["success"] is True
+
+    traversal = client.post(
+        "/api/load-data",
+        json={"file_name": "../outside.csv"},
+        headers=LOCAL_ORIGIN_HEADERS,
+    )
+    assert traversal.status_code == 400
+    assert str(outside) not in traversal.get_data(as_text=True)
+
+
+def test_missing_timestamp_is_rejected_without_fabricated_2024_time(tmp_path: Path, monkeypatch) -> None:
+    """没有 timestamp/date 的文件必须失败，不能产生固定 2024 伪时间。"""
+    from webui import app as app_module
+
+    allowed = tmp_path / "data"
+    allowed.mkdir()
+    source = allowed / "no-time.csv"
+    pd.DataFrame({"open": [1], "high": [2], "low": [0], "close": [1]}).to_csv(source, index=False)
+    monkeypatch.setattr(app_module, "DATA_DIRECTORY", allowed)
+
+    frame, error = load_data_file(str(source))
+    assert frame is None
+    assert error == "MISSING_TIMESTAMP"
+
+    response = app.test_client().post(
+        "/api/load-data",
+        json={"file_name": source.name},
+        headers=LOCAL_ORIGIN_HEADERS,
+    )
+    assert response.status_code == 400
+    assert response.get_json()["action_permission"] == "NONE"
+    assert "2024-01-01" not in response.get_data(as_text=True)

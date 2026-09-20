@@ -49,13 +49,23 @@ def _prepare_prices(price_history: pd.DataFrame) -> pd.DataFrame:
         prices = prices.set_index("date")
     prices.index = pd.DatetimeIndex(pd.to_datetime(prices.index)).normalize()
     prices = prices.loc[~prices.index.duplicated(keep="last")].sort_index()
-    prices.columns = [str(code).zfill(6) for code in prices.columns]
+    normalized_columns: list[str] = []
+    for code in prices.columns:
+        text = str(code).strip()
+        if len(text) != 6 or not text.isdigit():
+            raise ValueError(f"价格历史中的证券代码格式无效：{code!r}")
+        normalized_columns.append(text)
+    prices.columns = normalized_columns
     return prices.apply(pd.to_numeric, errors="coerce")
 
 
 def _evaluate_row(item: dict[str, Any], prices: pd.DataFrame, horizon: int) -> dict[str, Any]:
     """从单条历史建议生成不可提前得知收益的观察记录。"""
-    result = {"recommendation_id": item.get("id"), "stock_code": str(item.get("stock_code", "")).zfill(6), "action": item.get("action"), "data_as_of": item.get("data_as_of"), "status": "", "entry_price": None, "exit_price": None, "actual_return": None}
+    raw_code = str(item.get("stock_code", "")).strip()
+    result = {"recommendation_id": item.get("id"), "stock_code": raw_code, "action": item.get("action"), "data_as_of": item.get("data_as_of"), "status": "", "entry_price": None, "exit_price": None, "actual_return": None}
+    if len(raw_code) != 6 or not raw_code.isdigit():
+        result["status"] = "INVALID_STOCK_CODE"
+        return result
     if not bool(item.get("evidence_gate_passed")):
         result["status"] = "EXCLUDED_EVIDENCE_GATE_FAILED"
         return result

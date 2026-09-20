@@ -65,6 +65,22 @@ def test_report_does_not_use_innerhtml_for_api_data() -> None:
     assert ".innerHTML" not in js, "report_v2.js 不得使用 innerHTML 处理 API 数据"
 
 
+def test_report_buttons_pass_explicit_generation_modes() -> None:
+    """两个按钮都必须显式传递模式，不能把 click 事件当成 mode。"""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "webui" / "static" / "report_v2.js").read_text(encoding="utf-8")
+    assert re.search(
+        r'btn\.addEventListener\("click", function \(\) \{\s+generateReport\("model"\);',
+        js,
+    )
+    assert re.search(
+        r'baselineBtn\.addEventListener\("click", function \(\) \{\s+generateReport\("baseline"\);',
+        js,
+    )
+    assert 'btn.addEventListener("click", generateReport);' not in js
+
+
 def test_report_stock_input_accepts_code_or_name() -> None:
     """股票输入框支持中文名称联想，但提交仍校验六位代码。"""
     html = _report_html()
@@ -75,6 +91,10 @@ def test_report_stock_input_accepts_code_or_name() -> None:
     # 提交端仍只接受六位数字代码
     from webui.app import app
 
-    response = app.test_client().post("/api/v2/decision-report", json={"stock_code": "贵州茅台"})
+    response = app.test_client().post(
+        "/api/v2/decision-report",
+        json={"stock_code": "贵州茅台"},
+        headers={"Origin": "http://localhost:7070"},
+    )
     assert response.status_code == 400
     assert response.get_json()["error"]["code"] == "INVALID_REQUEST"

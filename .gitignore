@@ -84,6 +84,10 @@ tmp/
 # Cache data (keep directory structure)
 data/cache/*.csv
 data/cache/*.meta.json
+data/snapshots/*
+!data/snapshots/.gitkeep
+data/reports/*
+!data/reports/.gitkeep
 data/user/
 artifacts/
 .pytest-basetemp/

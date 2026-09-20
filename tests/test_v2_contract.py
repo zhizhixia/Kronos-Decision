@@ -1,6 +1,7 @@
 """v2 五态动作和安全 API 契约。"""
 from __future__ import annotations
 
+from decision.contracts import ActionPermission, EvidenceStatus
 from decision.v2 import RecommendationAction, decide_action, legacy_signal
 from decision.engine import DecisionEngine, DecisionReport
 
@@ -11,22 +12,38 @@ import numpy as np
 def test_evidence_failure_never_maps_to_sell() -> None:
     action, reasons = decide_action(False, {5: 0.0, 20: 0.0, 60: 0.0}, {5: 0.0, 20: 0.0, 60: 0.0}, True, True)
     assert action is RecommendationAction.INSUFFICIENT_EVIDENCE
-    assert legacy_signal(action) == "HOLD"
+    assert legacy_signal(action) is None
     assert reasons == ("EVIDENCE_GATE_FAILED",)
 
 
+def test_legacy_signal_requires_qualified_conditional_reference() -> None:
+    """只有有证据且有条件参考权限的 ADD/HOLD/REDUCE 才能映射旧信号。"""
+    qualified = EvidenceStatus.QUALIFIED
+    conditional = ActionPermission.CONDITIONAL_REFERENCE
+
+    assert legacy_signal(RecommendationAction.ADD, qualified, conditional) == "BUY"
+    assert legacy_signal(RecommendationAction.HOLD, qualified, conditional) == "HOLD"
+    assert legacy_signal(RecommendationAction.REDUCE, qualified, conditional) == "SELL"
+    assert legacy_signal(RecommendationAction.INSUFFICIENT_EVIDENCE, qualified, conditional) is None
+    assert legacy_signal(RecommendationAction.AVOID, qualified, conditional) is None
+    assert legacy_signal(None, qualified, conditional) is None
+    assert legacy_signal("UNKNOWN", qualified, conditional) is None
+    assert legacy_signal(RecommendationAction.HOLD, EvidenceStatus.INSUFFICIENT, conditional) is None
+    assert legacy_signal(RecommendationAction.HOLD, qualified, ActionPermission.NONE) is None
+
+
 def test_stale_cache_or_path_flags_force_degraded_hold() -> None:
-    """过期缓存或路径质量标记必须把旧三态动作强制为 HOLD 并标记 degraded。"""
+    """过期缓存或路径质量标记必须清除旧三态动作并标记 degraded。"""
     from decision.analyzer import RiskResult, SignalResult, TrendResult
     from decision.engine import DecisionEngine
 
     signal = SignalResult("BUY", "测试信号", TrendResult("↑", 0.9, "高", 0.8), RiskResult(-0.02, "低", "低"))
     assert DecisionEngine._apply_legacy_evidence_floor(signal, is_stale=True, path_flags=()) == "degraded"
-    assert signal.signal == "HOLD"
+    assert signal.signal is None
     assert "证据不足" in signal.signal_reason
     fresh = SignalResult("BUY", "测试信号", TrendResult("↑", 0.9, "高", 0.8), RiskResult(-0.02, "低", "低"))
     assert DecisionEngine._apply_legacy_evidence_floor(fresh, is_stale=False, path_flags=("PATH_REPAIR_EXCESSIVE",)) == "degraded"
-    assert fresh.signal == "HOLD"
+    assert fresh.signal is None
     normal = SignalResult("BUY", "测试信号", TrendResult("↑", 0.9, "高", 0.8), RiskResult(-0.02, "低", "低"))
     assert DecisionEngine._apply_legacy_evidence_floor(normal, is_stale=False, path_flags=()) == "ok"
     assert normal.signal == "BUY"

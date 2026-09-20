@@ -166,11 +166,19 @@ def test_portfolio_save_api_accepts_put_and_rejects_post(monkeypatch) -> None:
     monkeypatch.setattr("portfolio.store.PortfolioStore", FakeStore)
     client = app.test_client()
 
-    ok = client.put("/api/v2/portfolio", json={"name": "x", "risk_profile": "balanced", "cash": 1.0, "holdings": []})
+    ok = client.put(
+        "/api/v2/portfolio",
+        json={"name": "x", "risk_profile": "balanced", "cash": 1.0, "holdings": []},
+        headers={"Origin": "http://127.0.0.1:7070"},
+    )
     assert ok.status_code == 200
     assert ok.get_json()["status"] == "ok"
     assert captured["profile_id"] == "default"
     assert captured["payload"]["name"] == "x"
 
-    bad = client.post("/api/v2/portfolio", json={"name": "x"})
+    bad = client.post(
+        "/api/v2/portfolio",
+        json={"name": "x"},
+        headers={"Origin": "http://127.0.0.1:7070"},
+    )
     assert bad.status_code == 405, "保存用 PUT，POST 应被拒绝以锁定契约"

@@ -23,3 +23,11 @@ def test_model_manager_not_loaded_initially():
     """新创建的 ModelManager 未加载模型。"""
     mgr = ModelManager()
     assert not mgr.is_ready() or True  # 环境差异，不强制断言
+
+
+def test_model_manager_rejects_implicit_model_download():
+    """默认配置下缺少本地权重时不得隐式联网下载模型。"""
+    mgr = ModelManager()
+
+    with pytest.raises(ModelNotReadyError, match="禁止自动下载"):
+        mgr.get_predictor()

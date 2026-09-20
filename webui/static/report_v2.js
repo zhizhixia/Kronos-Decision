@@ -25,6 +25,12 @@
     INSUFFICIENT_EVIDENCE: "INSUFFICIENT_EVIDENCE · 门禁未通过",
   };
 
+  const RUN_STATUSES = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"]);
+  const EVIDENCE_STATUSES = new Set(["RESEARCH_ONLY", "QUALIFIED", "INSUFFICIENT", "STALE", "INVALID"]);
+  const ACTION_PERMISSIONS = new Set(["NONE", "CONDITIONAL_REFERENCE", "INSUFFICIENT_EVIDENCE"]);
+  const ACTIONS_WITH_REFERENCE = new Set(["ADD", "HOLD", "REDUCE", "AVOID"]);
+  const LEGACY_SIGNAL_BY_ACTION = { ADD: "BUY", HOLD: "HOLD", REDUCE: "SELL", AVOID: "SELL" };
+
   const GATE_LABELS = {
     DATA_COMPLETE: "数据截止完整交易日",
     NO_QUALITY_ERROR: "无未解决质量错误",
@@ -311,9 +317,11 @@
     }
   }
 
-  async function generateReport() {
+  async function generateReport(mode) {
+    mode = mode || "model";
     const codeInput = getElement("stock-code");
     const btn = getElement("generate-btn");
+    const baselineBtn = getElement("baseline-btn");
     const code = codeInput ? codeInput.value.trim() : "";
 
     if (!validateCode(code)) {
@@ -328,9 +336,12 @@
     if (btn) {
       btn.disabled = true;
     }
+    if (baselineBtn) {
+      baselineBtn.disabled = true;
+    }
     hide(getElement("stock-suggestions"));
     setInputExpanded(false);
-    updateStatus("正在生成报告...", "warn");
+    updateStatus(mode === "baseline" ? "正在生成无模型基线..." : "正在生成报告...", "warn");
     const startedAt = Date.now();
     startElapsedTimer(startedAt);
 
@@ -342,6 +353,7 @@
       stock_code: code,
       portfolio_id: "default",
       include_display_paths: includePaths,
+      mode: mode,
     };
 
     const result = await WB.postJson("/api/v2/decision-report", lastRequest, 120000);
@@ -351,8 +363,12 @@
     if (btn) {
       btn.disabled = false;
     }
+    if (baselineBtn) {
+      baselineBtn.disabled = false;
+    }
 
     const elapsedSeconds = (Date.now() - startedAt) / 1000;
+    renderContract(result.payload);
 
     if (!result.ok) {
       const error = result.error || {};
@@ -374,7 +390,7 @@
     if (input) {
       input.value = lastRequest.stock_code;
     }
-    generateReport();
+    generateReport(lastRequest.mode || "model");
   }
 
   function renderError(error, elapsedSeconds) {
@@ -433,17 +449,59 @@
     }
   }
 
+  function renderContract(payload) {
+    const source = payload && typeof payload === "object" ? payload : {};
+    WB.setText(getElement("run-status"), source.run_status || "未知");
+    WB.setText(getElement("evidence-status"), source.evidence_status || "未知");
+    WB.setText(getElement("action-permission"), source.action_permission || "NONE");
+  }
+
+  function hasValidReferenceContract(payload) {
+    return Boolean(
+      payload &&
+      RUN_STATUSES.has(payload.run_status) &&
+      payload.run_status === "SUCCEEDED" &&
+      EVIDENCE_STATUSES.has(payload.evidence_status) &&
+      payload.evidence_status === "QUALIFIED" &&
+      ACTION_PERMISSIONS.has(payload.action_permission) &&
+      payload.action_permission === "CONDITIONAL_REFERENCE"
+    );
+  }
+
+  function safeRecommendation(payload) {
+    const recommendation = payload && typeof payload.recommendation === "object"
+      ? payload.recommendation
+      : {};
+    const action = typeof recommendation.action === "string"
+      ? recommendation.action.toUpperCase()
+      : "";
+    if (!hasValidReferenceContract(payload) || !ACTIONS_WITH_REFERENCE.has(action)) {
+      return {
+        action: "INSUFFICIENT_EVIDENCE",
+        legacy_signal: null,
+        reason_codes: ["INSUFFICIENT_EVIDENCE"],
+      };
+    }
+    return Object.assign({}, recommendation, {
+      action: action,
+      legacy_signal: LEGACY_SIGNAL_BY_ACTION[action],
+    });
+  }
+
   function renderReport(payload, elapsedSeconds) {
+    payload = payload && typeof payload === "object" ? payload : {};
+    renderContract(payload);
+    const recommendation = safeRecommendation(payload);
     hideErrorCard();
     updateStatus("完成，耗时 " + elapsedSeconds.toFixed(1) + "s", "ok");
     WB.setText(getElement("stock-name-display"), payload.stock?.name || "");
 
-    renderAction(payload.recommendation, payload.portfolio_impact);
+    renderAction(recommendation, payload.portfolio_impact);
     renderHorizons(payload.horizons);
     renderChart(payload.chart_data, payload.display_paths);
     renderProvenance(payload.data_provenance, payload.model_provenance);
     renderGate(payload.evidence_gate);
-    renderImpact(payload.portfolio_impact, payload.recommendation?.action);
+    renderImpact(payload.portfolio_impact, recommendation.action);
     renderMarket(payload.market_context);
     renderFundamentals(payload.fundamentals, payload.events);
   }
@@ -839,6 +897,7 @@
   function init() {
     const input = getElement("stock-code");
     const btn = getElement("generate-btn");
+    const baselineBtn = getElement("baseline-btn");
     const suggestions = getElement("stock-suggestions");
     const retryBtn = getElement("error-retry-btn");
 
@@ -878,7 +937,14 @@
     }
 
     if (btn) {
-      btn.addEventListener("click", generateReport);
+      btn.addEventListener("click", function () {
+        generateReport("model");
+      });
+    }
+    if (baselineBtn) {
+      baselineBtn.addEventListener("click", function () {
+        generateReport("baseline");
+      });
     }
 
     if (retryBtn) {

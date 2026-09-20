@@ -59,7 +59,7 @@ def test_unreadable_cache_is_not_used_when_a_source_can_recover(tmp_path, monkey
     """中断留下的半个 CSV 不能阻断主数据源回退。"""
     fetcher = _fetcher(tmp_path)
     _bars().to_csv(fetcher._cache_path("600519"), index=False)
-    monkeypatch.setattr("data.fetcher.pd.read_csv", lambda *args, **kwargs: (_ for _ in ()).throw(pd.errors.ParserError("截断 CSV")))
+    monkeypatch.setattr(fetcher, "_load_cache", lambda code: None)
     monkeypatch.setattr(fetcher, "_fetch_akshare", lambda code: _bars())
     monkeypatch.setattr(fetcher, "_fetch_baostock", lambda code: (_ for _ in ()).throw(AssertionError("不应调用备源")))
 

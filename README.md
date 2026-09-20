@@ -75,35 +75,40 @@ Kronos-Decision 是在 [Kronos](https://github.com/shiyu-coder/Kronos)（AAAI 20
 > `--collect-only`、`--max-new-anchors`、`monthly` 锚点或单一 `--stocks` 均强制
 > `FORMAL_PROTOCOL=false`，结果只作研究展示。
 
-## 5. 安装与启动（Windows / Python 3.10/3.11）
+## 5. 安装与启动（Windows / Python 3.10+）
 
-一键启动（`start.bat` 会自动定位 Python 3.10/3.11、检查依赖、启动 WebUI）：
+先在项目环境中手工安装依赖：
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+一键启动（`start.bat` 从自身所在目录解析项目根目录，只使用本机已有的 Python 3.10
+及以上解释器，并检查 WebUI 依赖）：
 
 ```powershell
 .\start.bat
 ```
 
-手动启动：
+缺少 Python 或依赖时，脚本会用非零码安全退出并打印手工命令；不会自动执行 pip、下载
+Python/uv，也不会修改 PATH。手动启动同样不会自动安装：
 
 ```powershell
-pip install -r requirements.txt
 python webui/run.py
 ```
 
+`run.py` 会从脚本位置加载项目根目录下的 Flask 应用，读取 `decision/config.yaml` 的
+`webui.host` 与 `webui.port`。默认只监听 `127.0.0.1:7070`，关闭调试和自动重载。
 默认地址：<http://127.0.0.1:7070/report>（根路径 `/` 自动重定向到 `/report`）。
 
-> `start.bat` 仅接受 Python 3.10/3.11，否则报错退出。脚本按以下顺序定位解释器并逐个
-> 实际校验版本：① 项目 `.venv`；② `py -3.11` / `py -3.10`；③
-> `%LOCALAPPDATA%\Programs\Python\Python311` / `Python310`；④ PATH 中的 `python`。
-> 仍未找到时，若本机已装 [uv](https://docs.astral.sh/uv/)，脚本会用
-> `uv python find ... --no-python-downloads` 确认本机已有解释器，再用
-> `uv venv --offline --python 3.11 --no-python-downloads --seed` 在项目根离线创建隔离
-> `.venv`（`--offline` 保证连 seed 包也不联网，全程不下载 Python，不使用
-> `--break-system-packages`，也不直接选用
-> AppData 下 uv 的裸 Python）。若本机连一个 3.10/3.11 解释器都没有，先手工
-> `uv python install 3.11` 再重跑 `start.bat`。
-> 设置环境变量 `KRONOS_STARTUP_CHECK_ONLY=1` 可只做启动自检不拉起服务；此模式下若
-> 缺依赖只给出安装命令并以非零码退出，不联网安装、不启动服务。
+仅做启动检查而不拉起长期服务：
+
+```powershell
+$env:KRONOS_STARTUP_CHECK_ONLY = '1'
+.\start.bat
+```
+
+检查模式下缺依赖仍以非零码退出，只打印手工安装命令，不联网、不安装、不启动服务。
 
 ## 6. 可选研究依赖与环境变量
 
@@ -179,11 +184,15 @@ python -m evaluation.run --stage full --as-of YYYY-MM-DD --sample-count 100 --ru
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| POST | `/api/v2/decision-report` | 固定采样的五态报告；同时写入建议历史 |
+| POST | `/api/v2/decision-report` | 通过取数→不可变快照→决策→SQLite 发布的五态报告；`mode=baseline` 提供无模型事实基线 |
+| GET | `/api/v2/decision-report/<report_id>` | 只读读取已发布历史报告并重新校验快照 |
+| POST/GET | `/api/v2/decision-jobs`、`/api/v2/decision-jobs/<job_id>` | 有界异步任务、状态查询和取消 |
 | GET | `/api/v2/evaluation/latest` | 最近一次评估清单与门禁结果 |
 | GET | `/api/v2/forward-ledger/latest` | 最新每日建议前瞻台账 |
 | GET/PUT | `/api/v2/portfolio` | 读取或更新本地 SQLite 持仓 |
 | POST | `/api/v2/portfolio/rebalance` | 门禁通过时生成模拟目标权重与订单；永不执行真实交易 |
+| POST | `/api/v2/portfolio/preview`、`/api/v2/portfolio/confirm` | 持仓 CSV 预览与显式确认快照；预览不写账本 |
+| GET | `/api/v2/portfolio/snapshots/<snapshot_id>` | 只读读取并校验持仓快照 |
 | GET | `/api/v2/recommendations` | 本地建议历史 |
 | GET/PUT | `/api/config` | 读取或更新 `decision/config.yaml` |
 | POST | `/api/decision-report` | v1 兼容报告 |
@@ -216,34 +225,27 @@ kronos/
 
 ## 11. 已验证 / 部分验证 / 未验证
 
-- **已验证**：小规模全链路（本机 Windows + CUDA GPU）；离线回归套件已验证通过，
+- **已验证**：离线取数夹具贯穿不可变快照、无模型基线、SQLite 发布、Flask API 和重启读回；
+  离线回归套件已验证通过，
   网络/模型/GPU 相关测试按 `network`/`model`/`gpu` 标记单独分开运行，未一并执行；
   数据三级降级与缓存元数据来源记录；五态动作规则与门禁逻辑（单元测试覆盖）。
-- **部分验证**：Qlib 点时成分导入与回测在小型数据集上跑通；全收益基准导入脚本可工作
-  但需可用的 `H00300` 全收益序列。
-- **未验证**：正式完整沪深 300 全收益回测；20 日以上前瞻验证；多边界 GPU canary 仍属诊断
+- **部分验证**：Qlib 点时成分导入与回测在小型数据集上跑通；执行规则、成本压力、影子台账和恢复演练已用离线样例覆盖。
+- **未验证**：真实行情源、真实模型权重、真实 GPU 生产推理、真实 5/10/20 日样本外结算、
+  Windows 原生启动器真实端口运行；这些步骤受当前“不联网取数、不下载模型、不做真实交易”的边界限制。
+- **未验证**：正式完整沪深 300 全收益回测（需可用 H00300 序列）；20 日以上前瞻验证；多边界 GPU canary 仍属诊断，
   不可作为投资证据。
 
 ## 12. 常见问题
 
-- **Python not found**：`start.bat` 按以下顺序定位 Python 3.10/3.11，并对每个候选
-  实际校验版本（错误版本不会阻断后续候选）：
-  ① 项目 `.venv`（仅当为 3.10/3.11）；
-  ② `py -3.11` / `py -3.10`（仅当存在 py launcher）；
-  ③ `%LOCALAPPDATA%\Programs\Python\Python311` / `Python310`；
-  ④ PATH 中的 `python`；
-  均未命中时，若本机已装 [uv](https://docs.astral.sh/uv/)，脚本用
-  `uv python find 3.11 --no-python-downloads`（失败再 3.10）确认本机已有解释器，
-  随后用 `uv venv --offline --python 3.11 --no-python-downloads --seed` 在项目根离线创建 `.venv`
-  并复用（失败再 3.10）。`--offline` 保证创建 `.venv` 时 seed 包也不联网。
-  仍然失败则报错退出。修复方式：
-  (a) 从 [python.org](https://www.python.org) 安装 Python 3.11，并在安装界面勾选
-      “Add Python to PATH”；
-  (b) 若已装 uv 但本机还没有 3.10/3.11 解释器，先手工运行
-      `uv python install 3.11`，再重跑 `start.bat`。
-  脚本绝不直接选用 AppData 下 uv 的裸 Python（否则会触发
-  `externally-managed-environment`），也不用 `--break-system-packages`，也不自动下载 Python。
-- **Python version must be 3.10 or 3.11**：`start.bat` 严格校验版本，其他版本会拒绝。
+- **Python not found**：`start.bat` 从 `%~dp0` 推导项目目录，按项目 `.venv`、PATH 中的
+  `python`、已安装的 `py -3` 顺序查找，并接受 Python 3.10 及以上版本。脚本不会安装
+  Python、调用 uv 下载解释器或修改 PATH。找不到时请手工安装 Python 后重试。
+- **缺少 WebUI 依赖**：`start.bat` 和 `webui/run.py` 都只检查 Flask、NumPy、Pandas、
+  Plotly、PyYAML；缺失时安全退出并打印 `python -m pip install -r requirements.txt`，
+  不会自动执行该命令。
+- **启动检查**：设置 `KRONOS_STARTUP_CHECK_ONLY=1` 后运行 `start.bat`，只检查 Python
+  和依赖，不启动长期服务；缺依赖时以非零码退出。
+- **Python version**：`start.bat` 和 `webui/run.py` 要求 Python 3.10 或更高版本。
 - **CPU 推理很慢**：单次多路径采样在 CPU 上耗时较长；配置自动把 `sample_count` 降至 10 并
   标记 `reduced_for_cpu`，且该次运行不满足 `FORMAL_PROTOCOL`。
 - **首次模型下载**：首次运行会从 HuggingFace 下载 `NeoQuasar/Kronos-small` 与

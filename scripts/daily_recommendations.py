@@ -5,6 +5,11 @@
     $env:PYTHONPATH = ".\\vendor;."
     python scripts/daily_recommendations.py --stocks "600519,000001"
 
+回补历史锚点时加 --as-of（引擎会截取该日之前的数据并生成对应建议）：
+
+    $env:PYTHONPATH = "."
+    python scripts/daily_recommendations.py --stocks "600519,000001" --as-of "2026-08-12"
+
 输出默认写到 artifacts/daily/YYYY-MM-DD.csv，只保存建议，不产生任何真实交易。
 """
 from __future__ import annotations
@@ -26,6 +31,7 @@ def main() -> int:
     parser.add_argument("--stocks", default=None, help="逗号分隔的股票代码")
     parser.add_argument("--out", default=None, help="CSV 输出路径（默认 artifacts/daily/YYYY-MM-DD.csv）")
     parser.add_argument("--portfolio-id", default="default")
+    parser.add_argument("--as-of", dest="as_of", default=None, help="回补历史锚点 YYYY-MM-DD；缺省为最新完整交易日")
     args = parser.parse_args()
 
     from decision.engine import DecisionEngine
@@ -37,7 +43,7 @@ def main() -> int:
     rows = []
     for code in stocks:
         try:
-            report = engine.decision_report_v2(code, args.portfolio_id)
+            report = engine.decision_report_v2(code, args.portfolio_id, as_of=args.as_of)
             recommendation = report["recommendation"]
             eligibility = report.get("eligibility") or {}
             rows.append({
@@ -57,7 +63,8 @@ def main() -> int:
         except Exception as exc:
             rows.append({"stock_code": code, "action": "ERROR", "legacy_signal": "HOLD", "reason_codes": f"EXCEPTION:{exc}", "gate_passed": False, "eligible": False, "generated_at": datetime.now().isoformat()})
     frame = pd.DataFrame(rows)
-    out = Path(args.out) if args.out else Path("artifacts/daily") / f"{datetime.now().strftime('%Y-%m-%d')}.csv"
+    stamp = args.as_of.replace("-", "") if args.as_of else datetime.now().strftime("%Y-%m-%d")
+    out = Path(args.out) if args.out else Path("artifacts/daily") / f"{stamp}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", delete=False, dir=out.parent, suffix=".tmp") as handle:
         frame.to_csv(handle, index=False)

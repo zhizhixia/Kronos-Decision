@@ -31,11 +31,13 @@ class RiskResult:
 @dataclass
 class SignalResult:
     """最终决策信号。"""
-    signal: str            # "BUY" / "HOLD" / "SELL"
+    signal: str | None     # "BUY" / "HOLD" / "SELL"；无效输入时为空
     signal_reason: str     # 人类可读的决策理由
     trend: TrendResult
     risk: RiskResult
     score_detail: dict = field(default_factory=dict)
+    analysis_valid: bool = True
+    reason_codes: tuple[str, ...] = field(default_factory=tuple)
 
 
 class SignalAnalyzer:
@@ -72,18 +74,39 @@ class SignalAnalyzer:
         Returns:
             结构化的 SignalResult
         """
+        try:
+            paths = np.asarray(prediction_paths, dtype=float)
+        except (TypeError, ValueError):
+            return self._invalid_result("PREDICTION_PATHS_INVALID")
+        if (
+            paths.ndim < 3
+            or paths.shape[0] == 0
+            or paths.shape[1] == 0
+            or paths.shape[-1] <= 3
+        ):
+            return self._invalid_result("PREDICTION_PATHS_EMPTY")
+        if not np.isfinite(paths).all() or not np.isfinite(current_price) or current_price <= 0:
+            return self._invalid_result("PREDICTION_PATHS_NONFINITE")
+        if historical_closes is not None:
+            try:
+                historical = np.asarray(historical_closes, dtype=float)
+            except (TypeError, ValueError):
+                return self._invalid_result("HISTORICAL_CLOSES_INVALID")
+            if historical.size and not np.isfinite(historical).all():
+                return self._invalid_result("HISTORICAL_CLOSES_NONFINITE")
+
         # 提取各路径的最终价格
-        final_prices = prediction_paths[:, -1, 3]  # close 是第 4 列
+        final_prices = paths[:, -1, 3]  # close 是第 4 列
 
         # ── 趋势分析 ──────────────────────────
         trend = self._analyze_trend(final_prices, current_price)
 
         # ── 风险评估 ──────────────────────────
-        risk = self._analyze_risk(prediction_paths, final_prices, current_price)
+        risk = self._analyze_risk(paths, final_prices, current_price)
 
         # ── 反转信号（如有历史数据） ──────────
         if historical_closes is not None and len(historical_closes) > 30:
-            risk.reversal_risk = self._detect_reversal(historical_closes)
+            risk.reversal_risk = self._detect_reversal(np.asarray(historical_closes, dtype=float))
 
         # ── 决策矩阵判定 ──────────────────────
         signal, reason = self._decide(trend, risk)
@@ -96,11 +119,31 @@ class SignalAnalyzer:
             score_detail={
                 "trend_strength": trend.strength,
                 "up_probability": trend.up_probability,
+                "calibrated_up_probability": None,
+                "calibration_status": "unavailable",
                 "var_95": risk.var_95,
                 "volatility": risk.volatility,
                 "reversal_risk": risk.reversal_risk,
                 "consistency": trend.confidence,
             },
+        )
+
+    @staticmethod
+    def _invalid_result(reason_code: str) -> SignalResult:
+        """为无效输入返回不带动作的有限值结果，避免异常或 NaN 外泄。"""
+        return SignalResult(
+            signal=None,
+            signal_reason=f"证据不足：{reason_code}。",
+            trend=TrendResult(direction="→", strength=0.0, confidence="低", up_probability=0.0),
+            risk=RiskResult(var_95=0.0, volatility="高", reversal_risk="高"),
+            score_detail={
+                "analysis_valid": False,
+                "reason_codes": [reason_code],
+                "calibrated_up_probability": None,
+                "calibration_status": "unavailable",
+            },
+            analysis_valid=False,
+            reason_codes=(reason_code,),
         )
 
     # ── 私有方法 ──────────────────────────────
@@ -154,7 +197,6 @@ class SignalAnalyzer:
         var_95_ratio = (var_95 - current_price) / current_price
 
         # 波动率：价格区间宽度
-        all_prices = prediction_paths[:, -1, :]  # 最后一帧的所有 OHLCV
         price_range = float(np.std(final_prices) / current_price)
         if price_range > 0.10:
             volatility = "高"
@@ -220,5 +262,7 @@ class SignalAnalyzer:
         if trend.strength >= self._sell_threshold:
             return "HOLD", "趋势方向不明确，建议持有观望"
 
-        # 规则 5: 弱趋势 → 卖出
-        return "SELL", "趋势明确下行，建议回避"
+        # 中性或弱上行不能凭空变成卖出；只有明确下行才返回旧版 SELL。
+        if trend.direction == "↓":
+            return "SELL", "趋势明确下行，建议回避"
+        return "HOLD", "趋势不足以支持买卖，建议持有观望"

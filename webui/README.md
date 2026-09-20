@@ -12,28 +12,44 @@ Web user interface for Kronos financial prediction model, providing intuitive gr
 - **Comparison analysis**: Detailed comparison between prediction results and actual data
 - **K-line chart display**: Professional financial K-line chart display
 
-## 🚀 Quick Start
+## 启动
 
-### Method 1: Start with Python script
-```bash
-cd webui
-python run.py
+推荐从项目根目录使用安全启动入口：
+
+### Windows 一键启动
+
+```powershell
+.\start.bat
 ```
 
-### Method 2: Start with Shell script
-```bash
-cd webui
-chmod +x start.sh
-./start.sh
+`start.bat` 从自身路径解析项目根目录，只使用本机已有的 Python 3.10 及以上解释器，
+检查 Flask、NumPy、Pandas、Plotly、PyYAML 是否可用。缺少 Python 或依赖时会安全退出并
+打印手工命令，不会自动安装、下载 Python/uv 或修改 PATH。
+
+### 手动启动
+
+先手工安装依赖，再启动 WebUI：
+
+```powershell
+python -m pip install -r requirements.txt
+python webui/run.py
 ```
 
-### Method 3: Start Flask application directly
-```bash
-cd webui
-python app.py
+`webui/run.py` 可从脚本位置加载项目根目录下的应用，读取 `decision/config.yaml` 中的
+`webui.host` 和 `webui.port`，默认只监听 `127.0.0.1:7070`，关闭调试和自动重载。
+
+仅检查启动条件、不启动长期服务：
+
+```powershell
+$env:KRONOS_STARTUP_CHECK_ONLY = '1'
+.\start.bat
 ```
 
-After successful startup, visit http://localhost:7070
+检查模式下缺依赖以非零码退出，只打印手工安装命令。旧的 `webui/start.sh` 不属于本次
+安全启动入口，本文不将其作为推荐方式。
+
+启动成功后访问 <http://127.0.0.1:7070/report>。
+
 
 ## 📋 Usage Steps
 
@@ -108,16 +124,17 @@ The system automatically provides comparison analysis between prediction results
 - **Data processing**: Pandas + NumPy
 - **Model**: Hugging Face Transformers
 
-## 📝 Troubleshooting
+## 故障排查
 
-### Common Issues
-1. **Port occupied**: Modify port number in app.py
-2. **Missing dependencies**: Run `pip install -r requirements.txt`
-3. **Model loading failed**: Check network connection and model ID
-4. **Data format error**: Ensure data column names and format are correct
+### 常见问题
+1. **端口被占用**：修改 `decision/config.yaml` 的 `webui.port` 后重新启动。
+2. **缺少依赖**：手工执行 `python -m pip install -r requirements.txt`，然后重试。
+3. **模型加载失败**：检查模型缓存和模型标识；WebUI 启动检查本身不会自动下载依赖。
+4. **数据格式错误**：确保数据文件包含必需的列名和格式。
 
-### Log Viewing
-Detailed runtime information will be displayed in the console at startup, including model status and error messages.
+### 日志
+
+启动检查和运行时信息会输出到控制台，错误信息包含中文诊断和可恢复步骤。
 
 ## 📄 License
 

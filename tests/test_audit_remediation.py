@@ -89,7 +89,7 @@ def test_model_cleanup_never_releases_an_active_lease(monkeypatch) -> None:
     assert manager._predictor is None
 
 
-def test_v1_without_formal_evidence_is_degraded_hold_and_uses_cpu_budget(monkeypatch) -> None:
+def test_v1_without_formal_evidence_is_degraded_without_legacy_signal(monkeypatch) -> None:
     engine = DecisionEngine()
     observed: dict[str, object] = {}
     bars = pd.DataFrame({
@@ -140,7 +140,7 @@ def test_v1_without_formal_evidence_is_degraded_hold_and_uses_cpu_budget(monkeyp
     report = engine.predict_and_analyze("600519")
 
     assert report.status == "degraded"
-    assert report.signal is not None and report.signal.signal == "HOLD"
+    assert report.signal is not None and report.signal.signal is None
     assert observed["sample_count"] == 10
     assert observed["batch_size"] == 10
     assert started < float(observed["deadline"]) <= started + 61
@@ -151,12 +151,13 @@ def test_windows_launcher_uses_runtime_errorlevel() -> None:
     assert "%errorlevel%" not in content.lower()
     assert "if errorlevel 1" in content.lower()
     assert "KRONOS_STARTUP_CHECK_ONLY" in content
-    assert "py -3.11" in content
-    assert "py -3.10" in content
+    assert "py -3 -c" in content
+    assert "py -3.11" not in content
+    assert "py -3.10" not in content
 
 
 def test_start_bat_locked_design() -> None:
-    """锁定设计的轻量回归：uvexternally-managed 修复后的关键不变量。"""
+    """锁定安全启动设计的关键不变量。"""
     content = Path("start.bat").read_text(encoding="utf-8")
     lower = content.lower()
 
@@ -171,43 +172,30 @@ def test_start_bat_locked_design() -> None:
     ]
     assert not exec_break
 
-    # uv venv 仅以 --no-python-downloads 离线使用，且创建项目 .venv
+    # 启动入口不调用 uv，也不创建解释器或虚拟环境。
     uv_lines = [ln for ln in content.splitlines() if "uv venv" in ln.lower()]
-    assert uv_lines, "expected uv venv invocation"
-    for ln in uv_lines:
-        assert "--no-python-downloads" in ln
-        assert "--offline" in ln
-        assert r"%PROJECT%\.venv" in ln
+    assert not uv_lines
 
-    # uv python find 也必须离线
+    # 不通过 uv 查找或下载 Python。
     find_lines = [ln for ln in content.splitlines() if "uv python find" in ln]
-    assert find_lines, "expected uv python find invocation"
-    for ln in find_lines:
-        assert "--no-python-downloads" in ln
+    assert not find_lines
 
     # 绝不直接选择 APPDATA 下 uv 裸 Python
     assert r"%APPDATA%\uv\python" not in content
     assert "dir /b /s" not in lower
 
-    # check-only 模式不联网安装：失败分支给出的 pip install 仅出现在 echo 提示行，不实际执行
-    check_block = content[content.find('KRONOS_STARTUP_CHECK_ONLY!"=="1'):]
-    fail_idx = check_block.find("Dependencies missing")
-    end_idx = check_block.find("exit /b 1", fail_idx)
-    fail_block = check_block[fail_idx:end_idx]
-    assert "pip install" in fail_block  # 作为提示命令文本出现
-    exec_pip_in_check = [
-        ln for ln in fail_block.splitlines()
-        if "pip install" in ln.lower()
-        and ln.strip() and not ln.strip().lower().startswith("echo")
-    ]
-    assert not exec_pip_in_check  # 无实际执行的 pip install
+    # 缺依赖时只打印手工 pip 命令，不实际执行安装。
+    pip_lines = [ln for ln in content.splitlines() if "pip install" in ln.lower()]
+    assert pip_lines
+    assert all(ln.strip().lower().startswith(("echo ", "rem ")) for ln in pip_lines)
 
     # 每个路径候选都经过 :try_python 版本校验
     assert ":try_python" in content
-    assert "version_info[:2]in((3,10),(3,11))" in content.replace(" ", "")
+    assert "version_info>=(3,10)" in content.replace(" ", "")
 
-    # 正常启动仍可在缺依赖时 pip install requirements
+    # 只把手工安装命令作为提示文本保留。
     assert "-r " in content and "requirements.txt" in content
+    assert "0.0.0.0" not in content
 
 
 def test_temporary_sitecustomize_is_removed() -> None:

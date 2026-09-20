@@ -2,7 +2,14 @@
 import os
 import tempfile
 import pytest
-from decision.config import Config, get_config, reload_config, save_config, validate_config
+from decision.config import (
+    Config,
+    get_config,
+    reload_config,
+    save_config,
+    update_config,
+    validate_config,
+)
 from decision.errors import ConfigError
 
 
@@ -65,3 +72,34 @@ def test_config_validation_rejects_invalid_cross_field_constraint() -> None:
 
     with pytest.raises(ConfigError, match="fallback_sample_count"):
         validate_config(cfg)
+
+
+def test_config_validation_rejects_unknown_dynamic_fields_and_wrong_types() -> None:
+    """完整校验拒绝动态未知字段、布尔整数和敏感值回显。"""
+    cfg = Config()
+    cfg.prediction.unexpected = "super-secret-value"
+
+    with pytest.raises(ConfigError, match="unexpected") as error:
+        validate_config(cfg)
+
+    assert "super-secret-value" not in str(error.value)
+
+    cfg = Config()
+    cfg.prediction.default_sample_count = True
+    with pytest.raises(ConfigError, match="default_sample_count"):
+        validate_config(cfg)
+
+
+def test_update_config_validates_and_publishes_a_snapshot() -> None:
+    """更新先修改完整副本，失败不会替换运行中的单例。"""
+    original = get_config()
+
+    with pytest.raises(ConfigError, match="default_sample_count"):
+        update_config({"prediction": {"default_sample_count": 0}})
+
+    assert get_config() is original
+    assert get_config().prediction.default_sample_count == 100
+
+    updated = update_config({"prediction": {"timeout_seconds": 90}})
+    assert updated is get_config()
+    assert updated.prediction.timeout_seconds == 90

@@ -13,7 +13,11 @@ def test_invalid_config_api_does_not_mutate_live_config(monkeypatch, tmp_path) -
     monkeypatch.setattr(config_module, "_config_instance", original)
     client = app.test_client()
 
-    response = client.put("/api/config", json={"prediction": {"default_sample_count": 0}})
+    response = client.put(
+        "/api/config",
+        json={"prediction": {"default_sample_count": 0}},
+        headers={"Origin": "http://127.0.0.1:7070"},
+    )
 
     assert response.status_code == 400
     assert config_module.get_config().prediction.default_sample_count == 100
@@ -28,7 +32,11 @@ def test_valid_config_api_atomically_replaces_config(monkeypatch, tmp_path) -> N
     monkeypatch.setattr(config_module, "_config_instance", Config())
     client = app.test_client()
 
-    response = client.put("/api/config", json={"prediction": {"timeout_seconds": 90}})
+    response = client.put(
+        "/api/config",
+        json={"prediction": {"timeout_seconds": 90}},
+        headers={"Origin": "http://127.0.0.1:7070"},
+    )
 
     assert response.status_code == 200
     assert config_module.get_config().prediction.timeout_seconds == 90

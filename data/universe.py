@@ -43,7 +43,7 @@ class HistoricalUniverse:
         data = pd.read_csv(self.path, dtype={"stock_code": str}, parse_dates=["start_date", "end_date"])
         anchor = pd.Timestamp(anchor_date).normalize()
         active = data[(data["start_date"] <= anchor) & (data["end_date"] >= anchor)]
-        return set(active["stock_code"].str.zfill(6))
+        return set(active["stock_code"].astype(str))
 
     @staticmethod
     def _validate(data: pd.DataFrame) -> None:
@@ -53,6 +53,11 @@ class HistoricalUniverse:
         ends = pd.to_datetime(data["end_date"], errors="coerce")
         if starts.isna().any() or ends.isna().any() or (starts > ends).any():
             raise ValueError("历史股票池存在无效有效期。")
+        codes = data["stock_code"].astype(str).str.strip()
+        if codes.isna().any() or (~codes.str.fullmatch(r"\d{6}")).any():
+            raise ValueError("历史股票池存在格式无效的证券代码。")
+        if data["source"].astype(str).str.strip().eq("").any() or data["snapshot_version"].astype(str).str.strip().eq("").any():
+            raise ValueError("历史股票池缺少来源或版本。")
 
     def _atomic_write(self, data: pd.DataFrame) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

@@ -79,3 +79,33 @@ def test_result_has_all_fields(analyzer):
     assert result.risk.reversal_risk in ("高", "中", "低")
     assert result.signal in ("BUY", "HOLD", "SELL")
     assert len(result.signal_reason) > 0
+
+
+def test_empty_paths_have_no_signal(analyzer):
+    """空路径不应抛异常或伪造旧版动作。"""
+    result = analyzer.analyze(np.empty((0, 60, 5)), current_price=100.0)
+
+    assert result.signal is None
+    assert result.analysis_valid is False
+    assert "PREDICTION_PATHS_EMPTY" in result.reason_codes
+
+
+def test_nan_paths_have_no_signal(analyzer):
+    """NaN 路径必须拒绝，不能进入 BUY/HOLD/SELL 矩阵。"""
+    paths = np.ones((2, 60, 5), dtype=float)
+    paths[0, 0, 3] = np.nan
+
+    result = analyzer.analyze(paths, current_price=100.0)
+
+    assert result.signal is None
+    assert result.analysis_valid is False
+    assert "PREDICTION_PATHS_NONFINITE" in result.reason_codes
+
+
+def test_flat_paths_do_not_become_sell(analyzer):
+    """完全持平的有限路径保持中性，不应被旧规则判成 SELL。"""
+    paths = np.full((10, 60, 5), 100.0, dtype=float)
+
+    result = analyzer.analyze(paths, current_price=100.0)
+
+    assert result.signal == "HOLD"

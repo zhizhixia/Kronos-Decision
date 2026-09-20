@@ -6,6 +6,7 @@ import os
 import tempfile
 import time
 from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
@@ -13,6 +14,7 @@ import pandas as pd
 
 from data.calendar import AshareCalendar, SHANGHAI
 from data.contracts import MarketDataBundle, bars_hash
+from data.snapshots import SnapshotStore
 from decision.config import get_config
 from decision.errors import DataSourceError, DataValidationError
 
@@ -33,6 +35,7 @@ class DataFetcher:
     def __init__(self) -> None:
         cfg = get_config().data
         self._cache_dir = Path(cfg.cache_dir)
+        self._snapshot_dir = Path(cfg.snapshot_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._ttl_hours = cfg.cache_ttl_hours
         self._retry_max = cfg.retry_max
@@ -49,7 +52,7 @@ class DataFetcher:
         return self.fetch_daily_bundle(stock_code).bars
 
     def fetch_daily_bundle(self, stock_code: str, as_of: pd.Timestamp | None = None) -> MarketDataBundle:
-        """获取截至完整交易日的日线及其来源、新鲜度和质量信息。"""
+        """获取日线并立即绑定不可变快照，缓存只作为可重建的临时输入。"""
         cached = self._load_cache(stock_code)
         cache_meta = self._load_cache_metadata(stock_code)
         cached_flags: tuple[str, ...] = ()
@@ -60,7 +63,15 @@ class DataFetcher:
                 cached = None
                 cache_meta = {}
         if cached is not None and self._is_cache_fresh(stock_code) and not self._has_unresolved_gap(cached_flags):
-            return self._build_bundle(cached, "csv_cache", False, self._cache_fallback_chain(cache_meta), as_of, cached_flags)
+            bundle = self._build_bundle(
+                cached,
+                "csv_cache",
+                False,
+                self._cache_fallback_chain(cache_meta),
+                as_of,
+                cached_flags,
+            )
+            return self._bind_snapshot(bundle)
         chain: list[str] = []
         degraded: list[tuple[pd.DataFrame, str, tuple[str, ...]]] = []
         for source, func in self._source_candidates():
@@ -72,6 +83,7 @@ class DataFetcher:
                     degraded.append((bars, source, flags))
                     continue
                 bundle = self._build_bundle(bars, source, False, tuple(chain), as_of, flags)
+                bundle = self._bind_snapshot(bundle)
                 self._save_cache(stock_code, bundle.bars, bundle)
                 return bundle
             except (DataSourceError, DataValidationError):
@@ -79,11 +91,98 @@ class DataFetcher:
         if degraded:
             bars, source, flags = degraded[0]
             bundle = self._build_bundle(bars, source, False, tuple(chain), as_of, flags)
+            bundle = self._bind_snapshot(bundle)
             self._save_cache(stock_code, bundle.bars, bundle)
             return bundle
         if cached is not None:
-            return self._build_bundle(cached, "csv_cache", True, tuple(chain + ["csv_cache"]), as_of, (*cached_flags, "STALE_CACHE"))
+            bundle = self._build_bundle(
+                cached,
+                "csv_cache",
+                True,
+                tuple(chain + ["csv_cache"]),
+                as_of,
+                (*cached_flags, "STALE_CACHE"),
+            )
+            return self._bind_snapshot(bundle)
         raise DataSourceError(f"无法获取 {stock_code} 的可验证日线数据。")
+
+    def load_snapshot_bundle(self, snapshot_id: str) -> MarketDataBundle:
+        """离线读取并校验一个已发布快照，不访问网络或可变缓存。"""
+        store = SnapshotStore(self._snapshot_dir)
+        manifest = store.read_manifest(snapshot_id)
+        bars = store.read(snapshot_id)
+        try:
+            if "date" in bars:
+                bars["date"] = pd.to_datetime(bars["date"], errors="raise")
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError("快照日期列无法解析，拒绝离线恢复。") from exc
+        quality = manifest.quality
+        if not isinstance(quality, dict):
+            raise DataValidationError("快照质量元数据不是对象，无法恢复数据包。")
+        flags = quality.get("quality_flags", [])
+        fallback_chain = quality.get("fallback_chain", [])
+        if not isinstance(flags, list) or any(not isinstance(item, str) for item in flags):
+            raise DataValidationError("快照质量旗标无效，拒绝离线恢复。")
+        if not isinstance(fallback_chain, list) or any(not isinstance(item, str) for item in fallback_chain):
+            raise DataValidationError("快照来源链无效，拒绝离线恢复。")
+        adjustment = quality.get("adjustment")
+        calendar_version = quality.get("calendar_version")
+        is_stale = quality.get("is_stale")
+        retrieved_at = quality.get("retrieved_at")
+        latest_complete_session = quality.get("latest_complete_session")
+        universe_version = quality.get("universe_version")
+        if not isinstance(adjustment, str) or not isinstance(calendar_version, str):
+            raise DataValidationError("快照缺少调整方式或交易日日历版本。")
+        if not isinstance(is_stale, bool) or not isinstance(retrieved_at, str):
+            raise DataValidationError("快照缺少有效新鲜度或获取时间。")
+        if not isinstance(latest_complete_session, str) or not isinstance(manifest.as_of, str):
+            raise DataValidationError("快照缺少有效数据时点。")
+        if universe_version is not None and not isinstance(universe_version, str):
+            raise DataValidationError("快照证券池版本无效。")
+        try:
+            retrieved = pd.Timestamp(retrieved_at).to_pydatetime()
+            as_of = pd.Timestamp(manifest.as_of).normalize()
+            complete = pd.Timestamp(latest_complete_session).normalize()
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError("快照时间字段无法解析，拒绝离线恢复。") from exc
+        content_hash = quality.get("content_hash", manifest.content_hash)
+        if not isinstance(content_hash, str) or not content_hash:
+            raise DataValidationError("快照内容哈希元数据无效。")
+        return MarketDataBundle(
+            bars=bars,
+            source=manifest.source,
+            retrieved_at=retrieved,
+            as_of=as_of,
+            latest_complete_session=complete,
+            adjustment=adjustment,
+            calendar_version=calendar_version,
+            universe_version=universe_version,
+            is_stale=is_stale,
+            quality_flags=tuple(flags),
+            fallback_chain=tuple(fallback_chain),
+            content_hash=content_hash,
+            snapshot_id=snapshot_id,
+        )
+
+    def _bind_snapshot(self, bundle: MarketDataBundle) -> MarketDataBundle:
+        """把一次取数结果固化为独立快照，缓存变化不会覆盖它。"""
+        snapshot_id = SnapshotStore(self._snapshot_dir).save(
+            bundle.bars,
+            source=bundle.source,
+            as_of=bundle.as_of,
+            quality={
+                "quality_flags": list(bundle.quality_flags),
+                "fallback_chain": list(bundle.fallback_chain),
+                "is_stale": bundle.is_stale,
+                "retrieved_at": bundle.retrieved_at.isoformat(),
+                "latest_complete_session": bundle.latest_complete_session.isoformat(),
+                "adjustment": bundle.adjustment,
+                "calendar_version": bundle.calendar_version,
+                "universe_version": bundle.universe_version,
+                "content_hash": bundle.content_hash,
+            },
+        )
+        return replace(bundle, snapshot_id=snapshot_id)
 
     def _source_candidates(self) -> tuple[tuple[str, Callable[[str], pd.DataFrame]], ...]:
         """返回实际可用的数据源顺序；付费源仅在显式配置且凭据存在时启用。"""
@@ -279,6 +378,7 @@ class DataFetcher:
             "quality_flags": list(bundle.quality_flags),
             "fallback_chain": list(bundle.fallback_chain),
             "content_hash": bundle.content_hash,
+            "snapshot_id": bundle.snapshot_id,
         })
 
     @staticmethod

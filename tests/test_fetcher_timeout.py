@@ -27,7 +27,8 @@ def test_source_timeout_falls_through_to_next_source(tmp_path, monkeypatch) -> N
     monkeypatch.setattr(fetcher, "_build_bundle", lambda bars_, source, stale, chain, as_of, flags=(): bundle)
     started = time.time()
     result = fetcher.fetch_daily_bundle("600519")
-    assert result is bundle
+    assert result.snapshot_id
+    pd.testing.assert_frame_equal(result.bars, bundle.bars)
     assert time.time() - started < 3
 
 
