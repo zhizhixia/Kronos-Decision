@@ -1,0 +1,741 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-09-17T04:28:20.372486+00:00",
+  "root_description": "Kronos-Decision cross-machine handoff package",
+  "source_repository": "https://github.com/zhizhixia/Kronos-Decision.git",
+  "source_baseline": "89c62ed7e64f338882bf58654bcce39086475a30",
+  "implementation_status": "NOT_STARTED",
+  "git_managed_metadata_excluded": true,
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "size": 2346,
+      "sha256": "f02c2e9876c3825729a62bc5729fc9ca481ff100826330abbb9424675cd16baf"
+    },
+    {
+      "path": "README.md",
+      "size": 5938,
+      "sha256": "4120320ac88563ca5d288d664c001bc8f03f09e8cc1b90c7797ed026930a4a2e"
+    },
+    {
+      "path": "handoff/DECISIONS.md",
+      "size": 2135,
+      "sha256": "6692109278ad8768b1af997d47841f8956bf948b2771383bf9766f426ed5e7c3"
+    },
+    {
+      "path": "handoff/ENVIRONMENT.md",
+      "size": 3255,
+      "sha256": "f854524c346d0ee0f369163d010685975787ae6ab78c00c7526404ef2cb2a2f3"
+    },
+    {
+      "path": "handoff/NEXT_SESSION_PROMPT.md",
+      "size": 2268,
+      "sha256": "2d5c53055a317d0ca55379b8d9c06c53b0167e8fe10a81c087da1c8c09ad5155"
+    },
+    {
+      "path": "handoff/REVIEW_NOTES.md",
+      "size": 2445,
+      "sha256": "57cd82a73ad3cc9c619fd8602022e8a5a5c1ee48dc94f03df17969da99ae7b36"
+    },
+    {
+      "path": "handoff/STATUS.md",
+      "size": 2007,
+      "sha256": "68f0bc3049abc7998a4bbef44bc9073b8d11a8bcd75d1cebc65fa595a00068e3"
+    },
+    {
+      "path": "handoff/TASK_STATUS.csv",
+      "size": 4312,
+      "sha256": "9704cbff64322969ea00b307a23a184677c212e0ffdc9005601521776e2328ce"
+    },
+    {
+      "path": "plans/2026-09-16_221055-kronos-decision-master-improvement-plan.md",
+      "size": 58467,
+      "sha256": "642cf653fd647729d0727acd31d0c381f7ec75ccc8e106f5673d86cf017a5c85"
+    },
+    {
+      "path": "plans/2026-09-17_114049-kronos-decision-subagent-execution-plan.md",
+      "size": 59594,
+      "sha256": "7496170e245777bb4c8c43d1810d62104d7705c83ac286c4b2f3a97eceb71849"
+    },
+    {
+      "path": "rules/PROJECT_CONVENTIONS.md",
+      "size": 1595,
+      "sha256": "17586a33be3714a7272ada89122eeb4e112b27b7e137f215acbbaa722abe5151"
+    },
+    {
+      "path": "rules/enough/SKILL.md",
+      "size": 7295,
+      "sha256": "44bc5a3cacd3b4984335190ca4dfee05b4a484031ca9496aad987dd99f5a9e1f"
+    },
+    {
+      "path": "rules/enough/references/delegation-hygiene.md",
+      "size": 1900,
+      "sha256": "200f2eacdd223c91b70e7c0d602ce35af062a962df7e8d4e4e640e4c676fd7de"
+    },
+    {
+      "path": "rules/enough/references/github-reuse-gate.md",
+      "size": 3470,
+      "sha256": "ba0f5cbd68e0861780d72835bad0e99d7c7687f0495a899b5c749890447ab842"
+    },
+    {
+      "path": "rules/enough/references/verification-and-release.md",
+      "size": 6332,
+      "sha256": "bc581689cc5d67be14550155bc91e7ff6f685439be6c64453908a6ced37951a0"
+    },
+    {
+      "path": "scripts/verify_handoff.py",
+      "size": 4554,
+      "sha256": "4e50563e8958c4472bb7efd69e65faff9dbfe0b47a2288af1c087d7acd93cc94"
+    },
+    {
+      "path": "source/Kronos-Decision/.gitignore",
+      "size": 745,
+      "sha256": "98f71950b7b23813c99e9ca478ab63b0131fbf04131a7e0ceb77b33882943807"
+    },
+    {
+      "path": "source/Kronos-Decision/.slim/codemap.json",
+      "size": 3952,
+      "sha256": "77e37722d090f06ecc6966ca9c16cd777195894e0b1c2bbd7498a37e46707799"
+    },
+    {
+      "path": "source/Kronos-Decision/AGENTS.md",
+      "size": 4053,
+      "sha256": "6428addf4df2bb08c26385e9379543e01ae16ef1ec4321bf8320f6e909e99fc6"
+    },
+    {
+      "path": "source/Kronos-Decision/LICENSE",
+      "size": 1062,
+      "sha256": "acb2d194d378204e5f2be4dcd24d39ecac437903620c790c3315a96dab388fdc"
+    },
+    {
+      "path": "source/Kronos-Decision/PROJECT_DOCS.md",
+      "size": 44543,
+      "sha256": "8223782cd6996900a98a5e36f7b621e7e72872879de85f0b9f9e429de1a43ccb"
+    },
+    {
+      "path": "source/Kronos-Decision/README.md",
+      "size": 5488,
+      "sha256": "61f3de2abe6516f1c98ac6acd1e5209c53079cf5345e5965e928590913bcc9d3"
+    },
+    {
+      "path": "source/Kronos-Decision/codemap.md",
+      "size": 3416,
+      "sha256": "33378e9ff174b28651fa63a63349eb4cada204d69076fbc200ed24e32e6e4246"
+    },
+    {
+      "path": "source/Kronos-Decision/conftest.py",
+      "size": 88,
+      "sha256": "bbb563a880192d1b9c8becccb6357ed949a1daae3d0b9d8dade22ae76bd26798"
+    },
+    {
+      "path": "source/Kronos-Decision/data/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "source/Kronos-Decision/data/cache/.gitkeep",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "source/Kronos-Decision/data/codemap.md",
+      "size": 7076,
+      "sha256": "a2e29542328b76a44484a5856f99cb815a9ae7a8420cd2a725059b8ff2ca8380"
+    },
+    {
+      "path": "source/Kronos-Decision/data/fetcher.py",
+      "size": 8175,
+      "sha256": "943492c7b6ff3c317baf5a94987c2f35975130083d87f00aca17714e6f4d9fa8"
+    },
+    {
+      "path": "source/Kronos-Decision/data/pool.py",
+      "size": 2374,
+      "sha256": "1cbdd58d49525f63f9e195a8ae592ad17f01b10bba823a08a9de23acbb0ecb42"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/__init__.py",
+      "size": 31,
+      "sha256": "32ebf44a6b6a8faf22070dcfe34b55eacdcf7f5ca46fb5a4d07695a39d29cee2"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/analyzer.py",
+      "size": 8150,
+      "sha256": "1037be6117eb3c329f731b8dfb3ef29ff22ed1028916911e748f33da083d0765"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/codemap.md",
+      "size": 21594,
+      "sha256": "4a9b6f1482e9367e6612a48102001f38990b9316826bfca3fcf6d0bd494e4c91"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/config.py",
+      "size": 3873,
+      "sha256": "14f52f561dd4901506fdfd54914be03224dbae2ce9d5de1752c88119b50e1141"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/config.yaml",
+      "size": 820,
+      "sha256": "e38c6f90e30f0d34b9e334d414270eb879967a5bd384a45d592a42c43470acb2"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/engine.py",
+      "size": 7712,
+      "sha256": "3666de25daba4e5a036f20b5fb42a886ba9f9ca4dd9c701f76473ac4582d20ff"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/errors.py",
+      "size": 604,
+      "sha256": "3f4838cc498ce56240514a043afa11ea5112744d01785fe1319031c1d1f70797"
+    },
+    {
+      "path": "source/Kronos-Decision/decision/model_manager.py",
+      "size": 3949,
+      "sha256": "5f02c8ffb799d8621baf66e2fbb1e0f743751baa21cd7de69d9613815406b7e1"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/codemap.md",
+      "size": 11639,
+      "sha256": "a58cdf7810e5e5336f5ce69ef7f704aa3b17dabda88c8d84d1f8dd796163284f"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/get_akshare_date_2024-2025_x.py",
+      "size": 22761,
+      "sha256": "847bf9c04514cb36a5ae140d8f6fc02822bde1ed76257333ba72a653654a7236"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/get_date_new.py",
+      "size": 24268,
+      "sha256": "bf18d3558f20892148fe69172edd58c827a85d940615c89b83419434e96dabb9"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/predict_with_confidence.py",
+      "size": 23153,
+      "sha256": "6aac552faa825bf9e8b1d8c15f6be798ab75df175706efa8dc70a84937746b12"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_akshare_2024-2025.py",
+      "size": 22647,
+      "sha256": "e4cdc6e03ceafed0a64cafa2542f4ba1cfa48361eabb50b36e946a91c4d6ee8c"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_batch_example.py",
+      "size": 2312,
+      "sha256": "4d2eba046eb9ebcccf193372dce081fa01431c6a9c18ca9bf9ce485c4956586c"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_cn_markets_day.py",
+      "size": 6514,
+      "sha256": "3b9537275028e062b64263827421df4eece6f7276d040c8ffabd68e00bf5236c"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_example.py",
+      "size": 2457,
+      "sha256": "fd113d9466d42a0c07aeeec55c8dcbbdc3c0319727c9fc9bb89cd234c4c3ca01"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_new.py",
+      "size": 52593,
+      "sha256": "7585ae2eb117e635d624ec4c95269985cff494984e77939771e96852c7a58025"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_new_GUI.py",
+      "size": 65400,
+      "sha256": "8af93c21a37c8611aa1939d0173f79349041e87fd972469c1ac0ae6353f4cdeb"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/prediction_wo_vol_example.py",
+      "size": 1918,
+      "sha256": "c388097dae8af34014fd7006d4b7cd69b7657937b0fd2833e2ae0557404cfe10"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/run_backtest_kronos.py",
+      "size": 16811,
+      "sha256": "3bb7865d4b9f87cce16fe6a4be7d660f51176ac6a635139a3110089836f0aa83"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/000021_comprehensive_analysis_report.json",
+      "size": 1793,
+      "sha256": "2766b78ab57a57bd2b8c3057c6397299b276f4e0145876909858ca68834e6759"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/000021_optimized_prediction.png",
+      "size": 877297,
+      "sha256": "531a03e19120d9a69fb8e4380341f1c2a9cc6b7b98ddd543989ed7fbe71106c5"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/002354_comprehensive_analysis_report.json",
+      "size": 1796,
+      "sha256": "37e98f985f88b75839097c48e5db9f5065f9fce9c77ef90b073c9fa64fc86704"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/002354_optimized_prediction.png",
+      "size": 962962,
+      "sha256": "8d85805a3001d717a1ffbd6ca8afa492e62760b2ca3061cfbbff850bea3b3f89"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/300207_comprehensive_analysis_report.json",
+      "size": 2022,
+      "sha256": "62f479820c239f01be909a08e1cffcbcdaa6441ae236e10413bd6d6696714af6"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/300207_optimized_prediction.png",
+      "size": 794966,
+      "sha256": "d932e80b049511934ac261b8868146a522acb8da3d2f0387931c42f79adb43e6"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/600580_comprehensive_analysis_report.json",
+      "size": 2937,
+      "sha256": "2578ddb7c39ade879f277ad87070ae619cc4d0e3eec7086279a2a2df4e9225ff"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/600580_optimized_prediction.png",
+      "size": 910964,
+      "sha256": "eeedf79aa21322dd64febdd4b3911519bdd871673ade2710cea08e185942fab8"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/historical_backtest.py",
+      "size": 14807,
+      "sha256": "0f8dbd415b1621d844bca702c73f42f3f482ce325846a3e3e71be8a86be5db77"
+    },
+    {
+      "path": "source/Kronos-Decision/examples/yuce/market_analysis_report.json",
+      "size": 1084,
+      "sha256": "0a5f35048ae70a83fe2e8d463c9cec190576cd6828bba4f33779b8423d88b689"
+    },
+    {
+      "path": "source/Kronos-Decision/figures/backtest_result_example.png",
+      "size": 499292,
+      "sha256": "7b86fea2ac1a8d9a1c698039e64ae397d5453179557466a91da37431f331126c"
+    },
+    {
+      "path": "source/Kronos-Decision/figures/logo.png",
+      "size": 871803,
+      "sha256": "b4a3bb66fed73a24f74b74f15f0798d5edf1b9729ee826a0cad8e5088dedda61"
+    },
+    {
+      "path": "source/Kronos-Decision/figures/overview.png",
+      "size": 1254487,
+      "sha256": "f5b4556a39883fdd82b35515a686899a4c94495f70ab8f3fc7a7ac1e3104cc50"
+    },
+    {
+      "path": "source/Kronos-Decision/figures/prediction_example.png",
+      "size": 193945,
+      "sha256": "24ddc86256158658582687fc7cef4761f1dbb130ab8161e04957c8d178d323f9"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/codemap.md",
+      "size": 11476,
+      "sha256": "7220e67e6335d089adb28df228d54239189dc2715d38bbabe1e2b7790b620b45"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/config.py",
+      "size": 6247,
+      "sha256": "9368111b74a20d133c3daa591ef6db39eba97aa6ee7fb27481cb08217b489d7a"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/dataset.py",
+      "size": 5434,
+      "sha256": "774a37a3003ff2de31c078da53f4dcbd068fc45c56ada0d7b5a4beff4381b225"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/qlib_data_preprocess.py",
+      "size": 5645,
+      "sha256": "d699ca8e1ffcf0110670c1a89c1795ad77ffd0ad11851d24a9a9984c56fd221b"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/qlib_test.py",
+      "size": 15140,
+      "sha256": "027c04211af371d6ac8408a0f17f4249fdef068c6ba23a8fd46a16ca71b4e875"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/train_predictor.py",
+      "size": 10026,
+      "sha256": "b0d31d94da98e96636326674cef7ebc01c72d0de8a1b9e5b27123fd258529790"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/train_tokenizer.py",
+      "size": 11455,
+      "sha256": "2e1ae7e569de6fc03e4219a796aaf2d276663c44f61497495eee30261e3f0e98"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/utils/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune/utils/training_utils.py",
+      "size": 3830,
+      "sha256": "4339a9dde41a7fb2a949414c9c3e5d2c551a0e10c6b87e4b83e2444bf92a30e1"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/README.md",
+      "size": 3959,
+      "sha256": "97742b2bd0657d1bfc3c6827b8c8856ba04b08d5b8d869320be83f2752a0fac6"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/README_CN.md",
+      "size": 3650,
+      "sha256": "6ec258ce8ba96cf04762a4794535356c82a58169ba31209f5457dca91e1a5705"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/codemap.md",
+      "size": 11149,
+      "sha256": "e58dec04940692609578f844c46196c16c6528c2bbe134b9c2db966af14d4562"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/config_loader.py",
+      "size": 11688,
+      "sha256": "42de95078c9445dc9bbc2374c98ce2f0e5b2b420bc80bb0806a8cc666744cd15"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/configs/config_ali09988_candle-5min.yaml",
+      "size": 2132,
+      "sha256": "623b4cfeba27c92f5567e488e421aed23b119cd32279a2b08b1f3627752855e3"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/data/HK_ali_09988_kline_5min_all.csv",
+      "size": 5852037,
+      "sha256": "65725aeebc3de8f59725f9b717b8621a1ce80b014288a6d64e05ac7a303f527f"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/examples/HK_ali_09988_kline_5min_all_historical_20250919_073929.png",
+      "size": 485286,
+      "sha256": "46fa743520e9564b778c5c0ac6fabfb70d792ed56a95d487181c305e4ff8e409"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/examples/HK_ali_09988_kline_5min_all_historical_20250919_073944.png",
+      "size": 484003,
+      "sha256": "3664566e7f8962066dd71cf1bd32b54cd791e94563a51595921af27280cf250d"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/examples/HK_ali_09988_kline_5min_all_historical_20250919_074012.png",
+      "size": 339080,
+      "sha256": "96845dba507340f83dbbeacc61b4772757fa7043b953841eab6bd62563ad09a4"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/examples/HK_ali_09988_kline_5min_all_historical_20250919_074042.png",
+      "size": 459975,
+      "sha256": "37633a5e9dfe0413589afb72dd0ca01b1649c2811b62daf240b0138b5bdde0ee"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/examples/HK_ali_09988_kline_5min_all_historical_20250919_074251.png",
+      "size": 543005,
+      "sha256": "0f0f24910675a4576820a17b70f109e821dd44d2324438411441e319a7d54dac"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/finetune_base_model.py",
+      "size": 19127,
+      "sha256": "42c89111582b932f8b2d099f2748d84c7a7b5843be101167b4b15b0d978ece30"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/finetune_tokenizer.py",
+      "size": 13741,
+      "sha256": "4177a6c2cb537b2221490957b6c691e13990547c8e70c5b759fce859d59266c3"
+    },
+    {
+      "path": "source/Kronos-Decision/finetune_csv/train_sequential.py",
+      "size": 15358,
+      "sha256": "6a2a8c95284767f85a5d9cced71dcc0e2fc42c6e8cae6be1bff81f059e83679e"
+    },
+    {
+      "path": "source/Kronos-Decision/model/__init__.py",
+      "size": 412,
+      "sha256": "f8f856ca3fedadcaac97e196be23d1aeda1c3c9ffe8903d66d43ea3bcac6240c"
+    },
+    {
+      "path": "source/Kronos-Decision/model/codemap.md",
+      "size": 11826,
+      "sha256": "06f9c93b1d7b3507eda7e59820a6604ef89c5548eaf571424e4563f12b09a90d"
+    },
+    {
+      "path": "source/Kronos-Decision/model/kronos.py",
+      "size": 30133,
+      "sha256": "0a5f90282e2039c2de0771473419715c845def154896dbd0f5747837e6241032"
+    },
+    {
+      "path": "source/Kronos-Decision/model/module.py",
+      "size": 23426,
+      "sha256": "a07edbadc0e96804c8158c021bbc6063bb7cc43b34d7fc470d5c8ff2005a409f"
+    },
+    {
+      "path": "source/Kronos-Decision/requirements.txt",
+      "size": 129,
+      "sha256": "b68eaa2f945d6a5726e3642ce5d6c82014b33a09c3c1bd6302f2c530db22593e"
+    },
+    {
+      "path": "source/Kronos-Decision/start.bat",
+      "size": 1275,
+      "sha256": "5e58ea60c4a09d672cb1f89d9331d85ffc73db3667637d843e40e9041b44e8c7"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/codemap.md",
+      "size": 8315,
+      "sha256": "96ca86e7a1488b46755c8ae33ebf18fb3c1929e3bbca8a395b4303876bdc4ffb"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/data/codemap.md",
+      "size": 2033,
+      "sha256": "0ea7aa4c67f53f014d8899ce2255ab16e36b15b0d2d754733933e2202586179e"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/data/generate_regression_output.py",
+      "size": 2814,
+      "sha256": "66e29271b0ab2d5a5ee2464598b3d44e60a0a97f71f2887951b1fe59288bb826"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/data/regression_input.csv",
+      "size": 147854,
+      "sha256": "aa5efe0121b7cc098db1a169ed38f9878681ef14a93c85d54a618fd073048899"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/data/regression_output_256.csv",
+      "size": 674,
+      "sha256": "5064d09ef7fe186b9c2aeed9dfdf234721b4b182a8305d92db9d3d5d6b37f29e"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/data/regression_output_512.csv",
+      "size": 673,
+      "sha256": "bb69a96cbfcf385ba433b8db7e9630b45a4b3032d091d12a7b0bac5996bad18b"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_analyzer.py",
+      "size": 2798,
+      "sha256": "d4bae917494e1a545acc1191b1119b8b164e9f062576665f9314059d6b01316f"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_config.py",
+      "size": 1155,
+      "sha256": "828171bc582f436794c479f8ae376a13903272fa504450739a4b2cb0c02926c4"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_engine.py",
+      "size": 842,
+      "sha256": "d89bd581a7c78075b180a90b5905f442ded31c4362c53752b5c607ebac16c317"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_errors.py",
+      "size": 1134,
+      "sha256": "d15feb2b0abc5fbdf28c0e6d57ff836bc7b4768e8b6054283ae4a3ed89917b9c"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_fetcher.py",
+      "size": 980,
+      "sha256": "a46e4c0d06c5a01aacf84382d6e8710f0f42f04ad6c1f23778feb402497dea52"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_integration.py",
+      "size": 1038,
+      "sha256": "9531d81c40e400370a941fe0d960b9d8b33431d944da4fbd5167e1bfd0703d18"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_kronos_regression.py",
+      "size": 5326,
+      "sha256": "527e74d137c40e2567477754cda43c649552287bf11ab27a1e31ff0e3706a0c4"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_model_manager.py",
+      "size": 830,
+      "sha256": "e69ee841024e77f4f5c4f0ff714fe2b2523fa923f810f7f9f1ac5243d7f2b189"
+    },
+    {
+      "path": "source/Kronos-Decision/tests/test_pool.py",
+      "size": 630,
+      "sha256": "7f06da64c6e8afe08a30412779ae5206311a5213bf2c68958ff577910fcb684d"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/README.md",
+      "size": 4120,
+      "sha256": "c7bc1a545ddacd8b94c31af2baae4b55d470952300d9bd96bb3c1d8e1d32baa6"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/app.py",
+      "size": 32611,
+      "sha256": "073446f25a6e81f8e9fe844230743c5a13107e0295468cb2990af725c60af4aa"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/codemap.md",
+      "size": 10001,
+      "sha256": "93cb995bc0b2e1bbcb559570b0ec538c71972c43f4ed3ba4fbc16f5c807030ab"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_163800.json",
+      "size": 53680,
+      "sha256": "bb9a1478ac36303264550920c7a75b42c92dc08784f0a114f8ffb44e4f913e57"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_164030.json",
+      "size": 53423,
+      "sha256": "59c8501626e9efe8a3f74f8b9c59f06611b461c039e565868d44989d6d2f9035"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_164422.json",
+      "size": 53885,
+      "sha256": "c9ef045e6afc79b85d4249fc9d31cd4e5be4b4ff8b5da9daf27aa3e9c03e056c"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_170831.json",
+      "size": 54467,
+      "sha256": "9691103cc9a701417d8b07a404f549ddd5fdea5e6e2f5cd0008902779a4af21b"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_171720.json",
+      "size": 54467,
+      "sha256": "2967bfbf1066f113010db2949672957e59a280123403eaf2ca98197148114caf"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_171913.json",
+      "size": 54467,
+      "sha256": "df3a2676d0b247ac5d25435ea37a5bb299ec0750bcea4aad1e21ff8279a00f12"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_172031.json",
+      "size": 54357,
+      "sha256": "529ced845fc285d5eea7f9cf7772361fb9d3608af590b9752665b53db9376fd9"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_172153.json",
+      "size": 54647,
+      "sha256": "7f043bc02cd116a56d8d805df0a42b9112733c257709aa2bd66e466ab62f43b1"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_172740.json",
+      "size": 54979,
+      "sha256": "1cc8b60771abe2dc928c434c8d695bad38d624e83092fba7b40915476180b584"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_173322.json",
+      "size": 54983,
+      "sha256": "b8f30a82a5fa5ddda34b369e927f0933a52281e39ec04eb0dbeda752e379f000"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_173455.json",
+      "size": 54937,
+      "sha256": "061db8899d1139acbb9b19e407d55a24617ddee157a7ca7e4a47219603302ba6"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_174410.json",
+      "size": 54826,
+      "sha256": "f88f4d5525e536a421220775e243484c770298fd4abd12bfb934250a1686eea2"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_174809.json",
+      "size": 54826,
+      "sha256": "4d442c5296dfbb526f588614a97fe9d2c0af19bbe1cbd756be91aa19129f0804"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_175057.json",
+      "size": 54821,
+      "sha256": "92f7ab4f2bf500d244986dcffa5f58332474b5aff884181497b9e8a637ac6029"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_175135.json",
+      "size": 54636,
+      "sha256": "a0be9971233a491e2481ff8ab7a49a9da2026e7a73951fff76e88f981c4bfffe"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_175909.json",
+      "size": 53086,
+      "sha256": "a2efbdfdf1c3c357e1da4e24f124eef41045ee2cede72b221fe8f5aafaec78bb"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_180308.json",
+      "size": 53086,
+      "sha256": "6412df92947aca2423e9641de071e6aa6908db8573f16b3475ac4f8876a6dd6f"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_180632.json",
+      "size": 53810,
+      "sha256": "987c174145e8ac31676bfa7d36ebcba54e26f02109ee56f2833f356edd63b5c7"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_180745.json",
+      "size": 53701,
+      "sha256": "c3587af841cfb65747135d2657a08112000e7ec4e962d517693099d3d61feb2c"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_180806.json",
+      "size": 53488,
+      "sha256": "506ca9cdb780c6366b3d0d6bb30fea81b963177bfaab9e5ca1a139a704f8da7b"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181012.json",
+      "size": 53498,
+      "sha256": "2ba2cb4d3b399c73dc153e6cee796194a8a3243080b2d8291c8453c7b3307b14"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181139.json",
+      "size": 53617,
+      "sha256": "de5a8a0ae4a40174f29ebff89f5c82839ee993bbb6dd1b99e4078b3027ae4210"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181240.json",
+      "size": 53765,
+      "sha256": "080d04640bccbaa02d703b3c2e1e5d234f6bfd774b9229329b6c95519d630000"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181434.json",
+      "size": 52890,
+      "sha256": "11bfdcef6f0e3aadd5930e4dd0bc17aca47d893d8edb50f34ed73e585afc1c58"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181513.json",
+      "size": 53442,
+      "sha256": "c6519d65e75a198f83ee49e6027dc30bab41c8f2c636e30bc4840cba03b4d3ad"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181612.json",
+      "size": 53591,
+      "sha256": "ef7dc400ac99a57ca76cb3a81771cc7267bd4db57373d00df912b17e5f6d37da"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181648.json",
+      "size": 53650,
+      "sha256": "058a8108e68751920d9fb119c3745369d721381ca3056659daa2b4cb3ea5b6dc"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181800.json",
+      "size": 53657,
+      "sha256": "1846f0fcae78c1c00942b7c1206ea16d6d2b11ed135c6fe7e127a0e0fad92409"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/prediction_results/prediction_20250826_181932.json",
+      "size": 53459,
+      "sha256": "58b3bb971ed95fac095ee380a4947739026ce5ef331f74eb06dc8ce2e7473598"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/requirements.txt",
+      "size": 111,
+      "sha256": "1104212a070bb3076eb31d6a2aa2c0bd11608343c2869833b93651d86abef767"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/run.py",
+      "size": 2470,
+      "sha256": "b241c57ce90195e1e99abb02c0af38d380842e305106e3a08c28c72cf68c4e3e"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/start.sh",
+      "size": 1007,
+      "sha256": "09b4dbbd1e4b94e57661ea202a6b7fd896510c89802f512bac6b94f68dba55f3"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/static/style.css",
+      "size": 34543,
+      "sha256": "c2147aedaf492253b360b1d9fed26facd0a8844d8540b8ce99d39a8aa80be894"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/templates/index.html",
+      "size": 45997,
+      "sha256": "94995c6cf0b5e83053736b11024cc7103d67b8ae73e6bfa2d4091ea59ebc4e99"
+    },
+    {
+      "path": "source/Kronos-Decision/webui/templates/report.html",
+      "size": 52040,
+      "sha256": "f1afd953a8879ac89497db58c23a49202807178a884172c77f1defb2224c660e"
+    },
+    {
+      "path": "source/kronos-baseline.bundle",
+      "size": 9947225,
+      "sha256": "2a3a4f939742ea1974ac0dd38b770b031decbc8de9ab2432805b2451eb7b6555"
+    }
+  ]
+}

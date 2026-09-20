@@ -1,0 +1,64 @@
+{
+  "created_utc": "2026-09-17T04:27:29.699101+00:00",
+  "package_description": "Kronos-Decision 跨电脑开发交接包：计划、规则、源码基线和只读核验工具。",
+  "repository_url": "https://github.com/zhizhixia/Kronos-Decision.git",
+  "source_baseline": "89c62ed7e64f338882bf58654bcce39086475a30",
+  "source_copy": "source/Kronos-Decision/（git checkout --detach 基线，含 .git）",
+  "offline_bundle": "source/kronos-baseline.bundle（完整可达历史）",
+  "implementation_status": "NOT_STARTED",
+  "scope": {
+    "included": [
+      "两份计划",
+      "enough 工作流快照",
+      "交接与决策说明",
+      "任务状态台账",
+      "原始源码工作副本",
+      "离线 Git bundle",
+      "校验脚本与 SHA-256 清单"
+    ],
+    "excluded": [
+      "Conda/虚拟环境",
+      "模型权重与下载缓存",
+      "市场数据与个人运行数据库",
+      "持仓/券商/凭据",
+      "浏览器会话",
+      "Windows 计划任务",
+      "未提交的旧工作区改动"
+    ]
+  },
+  "verification": {
+    "plans_byte_identical_to_source": true,
+    "enough_rules_byte_identical_to_source": true,
+    "source_git_fsck": "ok",
+    "source_worktree_clean": true,
+    "source_tracked_files": 129,
+    "source_tracked_bytes": 17077114,
+    "bundle_bytes": 9947225,
+    "bundle_verify": "ok",
+    "bundle_offline_restore_baseline_match": true,
+    "bundle_restored_byte_mismatch_files": 0,
+    "verifier_script_cases_passed": 8,
+    "manifest_schema_version": 1,
+    "manifest_git_metadata_excluded": true,
+    "high_confidence_secret_pattern_files": [],
+    "active_git_hook_files": [],
+    "lfs_pointer_files": [],
+    "symlink_files": [],
+    "audit_limits": "少量高置信模式扫描，非完整历史安全审计",
+    "manifest_file_count": 146,
+    "final_manifest_verify_exit_code": 0,
+    "git_metadata_exclusion_matches_verifier": true
+  },
+  "review": {
+    "cross_computer_readonly_review": "完成：两条路径/映射问题已修复（离线恢复后项目根切换、上位计划目录映射）",
+    "plan_structural_checks": "任务/验收/依赖/批次已程序核验，无循环与并行写冲突"
+  },
+  "not_claims": {
+    "runnable_release": false,
+    "verified_strategy": false,
+    "dependencies_installed": false,
+    "model_downloaded": false,
+    "trade_authorized": false,
+    "authenticity_signature": "SHA-256 仅用于发现篡改，不是数字签名"
+  }
+}
