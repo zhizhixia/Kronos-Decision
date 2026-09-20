@@ -83,8 +83,8 @@ Kronos-Decision 是在 [Kronos](https://github.com/shiyu-coder/Kronos)（AAAI 20
 python -m pip install -r requirements.txt
 ```
 
-一键启动（`start.bat` 从自身所在目录解析项目根目录，只使用本机已有的 Python 3.10
-及以上解释器，并检查 WebUI 依赖）：
+一键启动（`start.bat` 从自身所在目录解析项目根目录，优先使用当前项目环境或 Conda
+环境 `kronos`，并检查 WebUI 与研究页面依赖）：
 
 ```powershell
 .\start.bat
@@ -237,12 +237,14 @@ kronos/
 
 ## 12. 常见问题
 
-- **Python not found**：`start.bat` 从 `%~dp0` 推导项目目录，按项目 `.venv`、PATH 中的
-  `python`、已安装的 `py -3` 顺序查找，并接受 Python 3.10 及以上版本。脚本不会安装
-  Python、调用 uv 下载解释器或修改 PATH。找不到时请手工安装 Python 后重试。
-- **缺少 WebUI 依赖**：`start.bat` 和 `webui/run.py` 都只检查 Flask、NumPy、Pandas、
-  Plotly、PyYAML；缺失时安全退出并打印 `python -m pip install -r requirements.txt`，
-  不会自动执行该命令。
+- **Python not found**：`start.bat` 从 `%~dp0` 推导项目目录，按项目 `.venv`、当前已激活
+  的 Conda 环境、指定的 Conda 环境（默认 `kronos`）、PATH 中的 `python`、已安装的
+  `py -3` 顺序查找，并接受 Python 3.10 及以上版本。脚本不会安装 Python、调用 uv 下载
+  解释器或修改 PATH。找不到时请手工安装 Python 或配置项目环境后重试。
+- **缺少 WebUI 或研究页面依赖**：`start.bat` 和 `webui/run.py` 会检查 Flask、NumPy、
+  Pandas、Plotly、PyYAML、scikit-learn；缺失时安全退出并打印
+  `python -m pip install -r requirements.txt`，不会自动执行该命令。若机器上存在 Conda，
+  启动器默认优先尝试 `kronos` 环境，也可用 `KRONOS_CONDA_ENV` 指定其他环境。
 - **启动检查**：设置 `KRONOS_STARTUP_CHECK_ONLY=1` 后运行 `start.bat`，只检查 Python
   和依赖，不启动长期服务；缺依赖时以非零码退出。
 - **Python version**：`start.bat` 和 `webui/run.py` 要求 Python 3.10 或更高版本。

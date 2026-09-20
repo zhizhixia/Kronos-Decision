@@ -22,9 +22,10 @@ Web user interface for Kronos financial prediction model, providing intuitive gr
 .\start.bat
 ```
 
-`start.bat` 从自身路径解析项目根目录，只使用本机已有的 Python 3.10 及以上解释器，
-检查 Flask、NumPy、Pandas、Plotly、PyYAML 是否可用。缺少 Python 或依赖时会安全退出并
-打印手工命令，不会自动安装、下载 Python/uv 或修改 PATH。
+`start.bat` 从自身路径解析项目根目录，优先使用当前项目环境或 Conda 环境 `kronos`，
+检查 Flask、NumPy、Pandas、Plotly、PyYAML、scikit-learn 是否可用。缺少 Python 或依赖
+时会安全退出并打印手工命令，不会自动安装、下载 Python/uv 或修改 PATH。可用
+`KRONOS_CONDA_ENV` 指定其他 Conda 环境。
 
 ### 手动启动
 

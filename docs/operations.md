@@ -25,7 +25,9 @@ conda run -n kronos python webui/run.py
 KRONOS_STARTUP_CHECK_ONLY=1 conda run -n kronos python webui/run.py
 ```
 
-Windows 入口为项目根目录下的 `start.bat`。启动器只检查 Python 和依赖，不自动安装依赖、解释器、模型或数据。
+Windows 入口为项目根目录下的 `start.bat`。启动器优先尝试当前项目环境和 Conda 的 `kronos`
+环境，并检查 WebUI 与研究页面所需依赖；不自动安装依赖、解释器、模型或数据。若使用其他
+Conda 环境，可设置 `KRONOS_CONDA_ENV` 后再启动。
 
 ## 模型启用边界
 

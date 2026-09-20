@@ -20,6 +20,7 @@ REQUIRED_MODULES = (
     ("pandas", "Pandas"),
     ("plotly", "Plotly"),
     ("yaml", "PyYAML"),
+    ("sklearn", "scikit-learn"),
 )
 
 

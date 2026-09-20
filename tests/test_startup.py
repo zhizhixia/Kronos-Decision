@@ -36,12 +36,16 @@ def test_run_py_uses_project_root_and_safe_server_defaults() -> None:
     assert "install_dependencies" not in source
 
 
-def test_start_bat_only_reports_manual_install_command() -> None:
-    """批处理入口必须检查依赖而不是执行 pip 或修改监听范围。"""
+def test_start_bat_selects_a_complete_environment() -> None:
+    """批处理入口必须选择包含研究页面依赖的环境。"""
     source = LAUNCHER.read_text(encoding="utf-8")
     lower = source.lower()
     assert "%~dp0" in source
     assert "kronos_startup_check_only" in lower
+    assert "chcp 65001" in lower
+    assert "conda run" in lower
+    assert "conda_env_name" in lower
+    assert "sklearn" in lower
     assert "set \"path=" not in lower
     assert "0.0.0.0" not in source
     assert "pip install" in lower
